@@ -6,8 +6,28 @@ What’s New In Towerpy
 Summary – Release highlights
 ----------------------------
 
-**Latest release: v1.0.7**
+**Latest release: v1.0.8**
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Towerpy v1.0.8
+~~~~~~~~~~~~~~
+::
+  **Towerpy v1.0.8**
+  
+    **Release Date:** 21 Jun 2025
+
+
+    **New features**
+      #. **attc.attc_zhzdr**: The *zh_correction* function has a new argument (*phidp0*) that sets the PhiDP(0) value for the attenuation correction. This change allows users to use a fixed value for PhiDP(0) but also to estimate it from the data. a new argument (*phidp0*) that sets the PhiDP(0) value for the attenuation correction. This change allows users to use a fixed value for PhiDP(0) but also to estimate it from the data.
+      #. **datavis.rad_display.plot_ppi**: The *font_sizes* argument was added to the *plot_ppi* function to allow users to set the font sizes of the plot.
+  
+    **Minor corrections**
+      #. **datavis.rad_display and datavis.rad_interactive**: Fix minor bugs and improve the documentation.
+      #. **eclass.nme.clutter_id**: Standardise the outputs of the function.
+      #. **eclass.snr**: Standardise the outputs of the function.
+      #. **ml.mlyr**: Fix some minor bugs in this module to improve the detection of the melting layer height.
+      #. **polprofs.pol_qvps**: Fix a bug in the *pol_qvps* function that was not allowing the function to run properly.
+      #. **radutilities.maf_radial**: Fix a bug in the *maf_radial* function that was not allowing the function to run properly.
 
 Towerpy v1.0.7
 ~~~~~~~~~~~~~~

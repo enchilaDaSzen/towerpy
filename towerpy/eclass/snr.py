@@ -38,7 +38,7 @@ class SNR_Classif:
 
     def signalnoiseratio(self, rad_georef, rad_params, rad_vars, min_snr=0,
                          rad_cst=None, snr_linu=False, data2correct=None,
-                         plot_method=False):
+                         classid=None, plot_method=False):
         """
         Compute the SNR and discard data using a reference noise value.
 
@@ -58,6 +58,10 @@ class SNR_Classif:
         plot_method : Bool, optional
             Plot the SNR classification method. The default is False.
         """
+        self.echoesID = {'pcpn': 0,
+                         'noise': 3}
+        if classid is not None:
+            self.echoesID.update(classid)
         if rad_cst:
             rc = rad_cst
         else:
@@ -75,10 +79,12 @@ class SNR_Classif:
             for key in rdatsnr:
                 rdatsnr[key] = rdatsnr[key]*snrclass
                 self.vars = rdatsnr
-        self.min_snr = min_snr
-        self.snr_class = snr
+        snr['snrclass'][np.isnan(snr['snrclass'])] = self.echoesID['noise']
+        snr['snrclass'][snr['snrclass'] == 1] = self.echoesID['pcpn']
         if plot_method:
             rad_display.plot_snr(rad_georef, rad_params, snr, min_snr)
+        self.min_snr = min_snr
+        self.snr_class = snr
 
     @staticmethod
     def static_signalnoiseratio(rad_georef, rad_params, rad_vars,

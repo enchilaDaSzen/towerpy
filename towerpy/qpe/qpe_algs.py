@@ -215,8 +215,7 @@ class RadarQPE:
         Parameters
         ----------
         kdp : float or array
-            Floats that corresponds to specific differential phase,
-            in deg/km.
+            Floats that corresponds to specific differential phase, in deg/km.
         a, b : floats
             Parameters of the :math:`R(K_{DP})` relationship
         beam_height : array, optional

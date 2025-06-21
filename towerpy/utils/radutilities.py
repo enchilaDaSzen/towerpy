@@ -108,12 +108,6 @@ def interp_nan(x, y, kind='linear', nan_type='mask'):
     nan_type : str, optional
         Type of non-valid values, either 'nan' or 'mask'.
         The default is 'mask'.
-
-    Returns
-    -------
-    TYPE
-        DESCRIPTION.
-
     """
     if nan_type == 'mask':
         idx_valid = np.ma.where(np.isfinite(y))
@@ -146,17 +140,17 @@ def maf_radial(rad_vars, maf_len=3, maf_ignorenan=True, maf_extendvalid=False,
         Filters the radar variable using min and max constraints.
         The default are:
 
-        :math:`ZH` [dBZ]: [np.NINF, np.inf]
+        :math:`ZH` [dBZ]: [-np.inf, np.inf]
 
-        :math:`Z_{DR}` [dB]: [np.NINF, np.inf]
+        :math:`Z_{DR}` [dB]: [-np.inf, np.inf]
 
-        :math:`\Phi_{DP}` [deg]: [np.NINF, np.inf]
+        :math:`\Phi_{DP}` [deg]: [-np.inf, np.inf]
 
-        :math:`\rho_{HV}` [-]: [np.NINF, np.inf]
+        :math:`\rho_{HV}` [-]: [-np.inf, np.inf]
 
-        :math:`V` [m/s]: [np.NINF, np.inf]
+        :math:`V` [m/s]: [-np.inf, np.inf]
 
-        :math:`LDR` [dB]: [np.NINF, np.inf]35, 35, 3]
+        :math:`LDR` [dB]: [-np.inf, np.inf]35, 35, 3]
 
     Returns
     -------
@@ -164,14 +158,14 @@ def maf_radial(rad_vars, maf_len=3, maf_ignorenan=True, maf_extendvalid=False,
         Transformed data.
 
     """
-    lpv = {'ZH [dBZ]': [np.NINF, np.inf], 'ZDR [dB]': [np.NINF, np.inf],
-           'PhiDP [deg]': [np.NINF, np.inf], 'rhoHV [-]': [np.NINF, np.inf],
-           'V [m/s]': [np.NINF, np.inf], 'LDR [dB]': [np.NINF, np.inf],
-           'Rainfall [mm/h]': [np.NINF, np.inf],
-           'KDP [deg/km]': [np.NINF, np.inf]}
+    lpv = {'ZH [dBZ]': [-np.inf, np.inf], 'ZDR [dB]': [-np.inf, np.inf],
+           'PhiDP [deg]': [-np.inf, np.inf], 'rhoHV [-]': [-np.inf, np.inf],
+           'V [m/s]': [-np.inf, np.inf], 'LDR [dB]': [-np.inf, np.inf],
+           'Rainfall [mm/h]': [-np.inf, np.inf],
+           'KDP [deg/km]': [-np.inf, np.inf]}
     for rkey in rad_vars.keys():
         if rkey not in lpv:
-            lpv[rkey] = [np.NINF, np.inf]
+            lpv[rkey] = [-np.inf, np.inf]
     if maf_params is not None:
         lpv.update(maf_params)
     for k, v in lpv.items():
