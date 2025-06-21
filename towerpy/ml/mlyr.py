@@ -442,8 +442,6 @@ class MeltingLayer:
                          'solid_pcp': 3.}
         if classid is not None:
             self.regionID.update(classid)
-        if np.isnan(ml_bottom):
-            ml_bottom = ml_top - ml_thickness
         if isinstance(ml_top, (int, float)):
             mlt_idx = [rut.find_nearest(nbh, ml_top)
                        for nbh in rad_georef['beam_height [km]']]
@@ -452,9 +450,14 @@ class MeltingLayer:
                        for cnt, nbh in
                        enumerate(rad_georef['beam_height [km]'])]
         if isinstance(ml_bottom, (int, float)):
+            if np.isnan(ml_bottom):
+                ml_bottom = ml_top - ml_thickness
             mlb_idx = [rut.find_nearest(nbh, ml_bottom)
                        for nbh in rad_georef['beam_height [km]']]
         elif isinstance(ml_bottom, (np.ndarray, list, tuple)):
+            ml_bottom = [mlt - ml_thickness[c1]
+                         if np.isnan(ml_bottom[c1]) else ml_bottom[c1]
+                         for c1, mlt in enumerate(ml_top)]
             mlb_idx = [rut.find_nearest(nbh, ml_bottom[cnt])
                        for cnt, nbh in
                        enumerate(rad_georef['beam_height [km]'])]

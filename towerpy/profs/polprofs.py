@@ -201,9 +201,14 @@ class PolarimetricProfiles:
         """
         ri, rf = 0, rad_params['ngates']
 
-        dh1 = rad_georef['beam_height [km]'][0]+np.diff(rad_georef['range [m]']/1000, prepend=0) * np.sin(np.deg2rad(rad_params['elev_ang [deg]']))
+        dh1 = (rad_georef['beam_height [km]'][0]
+               + np.diff(rad_georef['range [m]']/1000, prepend=0)
+               * np.sin(np.deg2rad(rad_params['elev_ang [deg]'])))
 
-        dh2 = rad_georef['beam_height [km]'][0]+rad_georef['beam_height [km]'][0] * np.deg2rad(rad_params['beamwidth [deg]']) * (1/np.tan(np.deg2rad(rad_params['elev_ang [deg]'])))
+        dh2 = (rad_georef['beam_height [km]'][0]
+               + rad_georef['beam_height [km]'][0]
+               * np.deg2rad(rad_params['beamwidth [deg]'])
+               * (1/np.tan(np.deg2rad(rad_params['elev_ang [deg]']))))
 
         dh = np.array([dhe if dhe > dh2[c1] else dh2[c1]
                        for c1, dhe in enumerate(dh1)])
@@ -216,7 +221,9 @@ class PolarimetricProfiles:
                                'Quasi-Vertical Profiles.')
         thlds_qvps = {'ZH [dBZ]': [-10, np.inf], 'ZDR [dB]': None,
                       'rhoHV [-]': [0.6, np.inf], 'PhiDP [deg]': None,
-                      'V [m/s]': None, 'KDP [deg/km]': None}
+                      'V [m/s]': None}
+        thlds_qvps = {k: thlds_qvps[k] if k in thlds_qvps.keys()
+                      else None for k in rad_vars.keys()}
         if thlds != 'default':
             thlds_qvps.update(thlds)
         rvars_idx = {k: np.where((kv >= thlds_qvps[k][0])

@@ -73,7 +73,7 @@ class NME_ID:
         data2correct :  dict, optional
             Variables into which LS ans speckles are removed.
             The default is None.
-        plot_method : TYPE, optional
+        plot_method : bool, optional
             Plot the LS/speckles classification method.
             The default is False.
 
@@ -131,17 +131,18 @@ class NME_ID:
                            if nray != 0 and nray != apad.shape[0]-1])
         spckl1[:, 0] = 1
         # Classifies the pixels according to echoesID
-        fclass = np.where(np.isnan(rad_vars['ZH [dBZ]']), 3, 0)
-        fclass2 = np.where(np.isnan(spckl1 * spckl2), 5, 0)
+        fclass = np.where(np.isnan(rad_vars['ZH [dBZ]']), 3., 0.)
+        fclass2 = np.where(np.isnan(spckl1 * spckl2), 5., 0.)
 
-        fclass = np.where(fclass2 == 5, 5, fclass)
+        fclass = np.where(fclass2 == 5., 5., fclass)
+        fclass[:, :5] = 0
 
         if classid is not None:
             fclass[fclass == 0] = self.echoesID['pcpn']
             fclass[fclass == 3] = self.echoesID['noise']
             fclass[fclass == 5] = self.echoesID['clutter']
 
-        lsc_data = {'classif': fclass}
+        lsc_data = {'classif [EC]': fclass}
 
         if data2correct is not None:
             data2cc = copy.deepcopy(data2correct)
@@ -298,7 +299,7 @@ class NME_ID:
             clc[clc == 0] = self.echoesID['pcpn']
             clc[clc == 3] = self.echoesID['noise']
             clc[clc == 5] = self.echoesID['clutter']
-        ccpoldata = {'classif': clc, 'clutter_map': clmap}
+        ccpoldata = {'classif [EC]': clc, 'clutter_map': clmap}
         if data2correct is not None:
             data2cc = copy.deepcopy(data2correct)
             for key, values in data2cc.items():
@@ -308,6 +309,8 @@ class NME_ID:
 
         if plot_method:
             if clmap is not None:
-                rad_display.plot_nmeclassif(rad_georef, rad_params, clc, clmap)
+                rad_display.plot_nmeclassif(rad_georef, rad_params, clc,
+                                            self.echoesID, clmap)
             else:
-                rad_display.plot_nmeclassif(rad_georef, rad_params, clc)
+                rad_display.plot_nmeclassif(rad_georef, rad_params, clc,
+                                            self.echoesID)

@@ -23,7 +23,7 @@ def plot_ppi(rad_georef, rad_params, rad_vars, var2plot=None, coord_sys='rect',
              ring=None, range_rings=None, rd_maxrange=False, pixel_midp=False,
              mlyr=None, points2plot=None, ptsvar2plot=None, vars_bounds=None,
              cpy_feats=None, proj_suffix='osgb', cbticks=None, fig_title=None,
-             fig_size=None):
+             font_sizes='regular', fig_size=None):
     """
     Display a radar PPI scan.
 
@@ -98,6 +98,10 @@ def plot_ppi(rad_georef, rad_params, rad_vars, var2plot=None, coord_sys='rect',
     fig_size : 2-element tuple or list, optional
         Modify the default plot size.
     """
+    fsizes = {'fsz_cb': 10, 'fsz_cbt': 12, 'fsz_pt': 14, 'fsz_axlb': 12,
+              'fsz_axtk': 10}
+    if font_sizes == 'large':
+        fsizes = {k1: v1 + 4 for k1, v1 in fsizes.items()}
     lpv = {'ZH [dBZ]': [-10, 60, 15], 'ZDR [dB]': [-2, 6, 17],
            'PhiDP [deg]': [0, 180, 10], 'KDP [deg/km]': [-2, 6, 17],
            'rhoHV [-]': [0.3, .9, 1], 'V [m/s]': [-5, 5, 11],
@@ -144,7 +148,7 @@ def plot_ppi(rad_georef, rad_params, rad_vars, var2plot=None, coord_sys='rect',
             bnd['[mm]'], mpl.colormaps['tpylsc_rad_rainrt'].N, extend='max')
     if '[km]' in bnd.keys():
         dnorm['[km]'] = mpc.BoundaryNorm(
-            bnd['[km]'], mpl.colormaps['gist_earth_r'].N, extend='max')
+            bnd['[km]'], mpl.colormaps['gist_earth'].N, extend='max')
     if unorm is not None:
         dnorm.update(unorm)
 # =============================================================================
@@ -186,7 +190,7 @@ def plot_ppi(rad_georef, rad_params, rad_vars, var2plot=None, coord_sys='rect',
                 cmaph.set_under('whitesmoke')
                 cbtks_fmt = 1
             if '[km]' in var2plot:
-                cmaph = mpl.colormaps['gist_earth_r']
+                cmaph = mpl.colormaps['gist_earth']
                 cbtks_fmt = 2
     else:
         cmaph = mpl.colormaps['tpylsc_rad_pvars']
@@ -215,7 +219,7 @@ def plot_ppi(rad_georef, rad_params, rad_vars, var2plot=None, coord_sys='rect',
             tcks = bnd['[mm]']
             cbtks_fmt = 1
         if '[km]' in var2plot:
-            cmaph = mpl.colormaps['gist_earth_r']
+            cmaph = mpl.colormaps['gist_earth']
             cbtks_fmt = 2
         if '[dB/km]' in var2plot:
             cbtks_fmt = 2
@@ -262,6 +266,8 @@ def plot_ppi(rad_georef, rad_params, rad_vars, var2plot=None, coord_sys='rect',
         ptitle = dtdes1 + dtdes2
     else:
         ptitle = fig_title
+    plotunits = [i[i.find('['):]
+                 for i in rad_vars.keys() if var2plot == i][0]
 # =============================================================================
     if coord_sys == 'polar':
         if fig_size is None:
@@ -271,10 +277,11 @@ def plot_ppi(rad_georef, rad_params, rad_vars, var2plot=None, coord_sys='rect',
         mappable = ax1.pcolormesh(rad_georef['theta'], rad_georef['rho'],
                                   np.flipud(rad_vars[var2plot]),
                                   shading='auto', cmap=cmaph, norm=normp)
-        ax1.set_title(f'{ptitle} \n' + f'PPI {var2plot}', fontsize=14)
+        ax1.set_title(f'{ptitle} \n' + f'PPI {var2plot}',
+                      fontsize=fsizes['fsz_pt'])
         ax1.grid(color='gray', linestyle=':')
         ax1.set_theta_zero_location('N')
-        ax1.tick_params(axis='both', labelsize=10)
+        ax1.tick_params(axis='both', labelsize=fsizes['fsz_axlb'])
         ax1.set_yticklabels([])
         ax1.set_thetagrids(np.arange(0, 360, 90))
         ax1.axes.set_aspect('equal')
@@ -283,13 +290,15 @@ def plot_ppi(rad_georef, rad_params, rad_vars, var2plot=None, coord_sys='rect',
             cb1 = plt.colorbar(mappable, ax=ax1, aspect=8, shrink=0.65,
                                pad=.1, norm=normp, ticks=tcks,
                                format=f'%.{cbtks_fmt}f')
-            cb1.ax.tick_params(direction='in', axis='both', labelsize=10)
+            cb1.ax.tick_params(direction='in', axis='both',
+                               labelsize=fsizes['fsz_cb'])
         else:
             cb1 = plt.colorbar(mappable, ax=ax1, aspect=8, shrink=0.65,
                                pad=.1, norm=normp)
-            cb1.ax.tick_params(direction='in', axis='both', labelsize=10)
+            cb1.ax.tick_params(direction='in', axis='both',
+                               labelsize=fsizes['fsz_cb'])
             # cb1.ax.set_xticklabels(['Low', 'Medium', 'High'])
-        cb1.ax.set_title(f'{var2plot}', fontsize=10)
+        cb1.ax.set_title(f'{plotunits}', fontsize=fsizes['fsz_cbt'])
         if cbticks is not None:
             cb1.set_ticks(ticks=list(cbticks.values()),
                           labels=list(cbticks.keys()))
@@ -380,7 +389,7 @@ def plot_ppi(rad_georef, rad_params, rad_vars, var2plot=None, coord_sys='rect',
             ax1.axhline(0, c='grey', ls='--', alpha=3/4)
             ax1.axvline(0, c='grey', ls='--', alpha=3/4)
             ax1.grid(True)
-
+# =============================================================================
         if ring is not None:
             idx_rr = rut.find_nearest(rad_georef['range [m]'],
                                       ring*1000)
@@ -394,21 +403,24 @@ def plot_ppi(rad_georef, rad_params, rad_vars, var2plot=None, coord_sys='rect',
            or '[mm/h]' in var2plot):
             cb1 = fig.colorbar(mappable, cax=cax1, orientation='horizontal',
                                ticks=tcks, format=f'%.{cbtks_fmt}f')
-            cb1.ax.tick_params(direction='in', labelsize=10)
+            cb1.ax.tick_params(direction='in', labelsize=fsizes['fsz_cb'],
+                               rotation=(45 if font_sizes == 'large' else 0))
         else:
             cb1 = fig.colorbar(mappable, cax=cax1, orientation='horizontal')
-            cb1.ax.tick_params(direction='in', labelsize=12)
-        fig.suptitle(f'{ptitle} \n' + f'PPI {var2plot}', fontsize=14)
+            cb1.ax.tick_params(direction='in', labelsize=fsizes['fsz_cb'])
+        fig.suptitle(f'{ptitle} \n' + f'PPI {var2plot}',
+                     fontsize=fsizes['fsz_pt'])
         cax1.xaxis.set_ticks_position('top')
         if xlims is not None:
             ax1.set_xlim(xlims)
         if ylims is not None:
             ax1.set_ylim(ylims)
-        ax1.set_xlabel('Distance from the radar [km]', fontsize=12,
-                       labelpad=10)
-        ax1.set_ylabel('Distance from the radar [km]', fontsize=12,
-                       labelpad=10)
-        ax1.tick_params(direction='in', axis='both', labelsize=10)
+        ax1.set_xlabel('Distance from the radar [km]',
+                       fontsize=fsizes['fsz_axlb'], labelpad=10)
+        ax1.set_ylabel('Distance from the radar [km]',
+                       fontsize=fsizes['fsz_axlb'], labelpad=10)
+        ax1.tick_params(direction='in', axis='both',
+                        labelsize=fsizes['fsz_axtk'])
         if cbticks is not None:
             cb1.set_ticks(ticks=list(cbticks.values()),
                           labels=list(cbticks.keys()), ha='right')
@@ -434,8 +446,7 @@ def plot_ppi(rad_georef, rad_params, rad_vars, var2plot=None, coord_sys='rect',
                                ' ccrs.OSGB(approx=False) or ccrs.UTM(zone=32)')
         fig = plt.figure(figsize=fig_size, constrained_layout=True)
         plt.subplots_adjust(left=0.05, right=0.99, top=0.981, bottom=0.019,
-                            wspace=0, hspace=1
-                            )
+                            wspace=0, hspace=1)
         ax1 = fig.add_subplot(projection=proj)
         if xlims and ylims:
             extx = xlims
@@ -459,6 +470,12 @@ def plot_ppi(rad_georef, rad_params, rad_vars, var2plot=None, coord_sys='rect',
                         style=cpy_features['tiles_style'])
                     ax1.add_image(imtiles, cpy_features['tiles_res'],
                                   # interpolation='spline36',
+                                  alpha=cpy_features['alpha_tiles'])
+            elif cpy_features['tiles_source'] == 'QuadtreeTiles':
+                if cpy_features['tiles_style'] is None:
+                    imtiles = cimgt.QuadtreeTiles()
+                    ax1.add_image(imtiles, cpy_features['tiles_res'],
+                                  interpolation='spline36',
                                   alpha=cpy_features['alpha_tiles'])
             elif cpy_features['tiles_source'] == 'Stamen':
                 if cpy_features['tiles_style'] is None:
@@ -504,9 +521,10 @@ def plot_ppi(rad_georef, rad_params, rad_vars, var2plot=None, coord_sys='rect',
                   + 'under CC BY 3.0. Data by OpenStreetMap, under ODbL.')
         gl = ax1.gridlines(draw_labels=True, dms=False,
                            x_inline=False, y_inline=False)
-        gl.xlabel_style = {'size': 12}
-        gl.ylabel_style = {'size': 12}
-        ax1.set_title(f'{ptitle} \n' + f'PPI {var2plot}', fontsize=14)
+        gl.xlabel_style = {'size': fsizes['fsz_axlb']}
+        gl.ylabel_style = {'size': fsizes['fsz_axlb']}
+        ax1.set_title(f'{ptitle} \n' + f'PPI {var2plot}',
+                      fontsize=fsizes['fsz_pt'])
         # lon_formatter = LongitudeFormatter(number_format='.4f',
         #                                 degree_symbol='',
         #                                dateline_direction_label=True)
@@ -520,9 +538,6 @@ def plot_ppi(rad_georef, rad_params, rad_vars, var2plot=None, coord_sys='rect',
                                   alpha=cpy_features['alpha_rad'])
         # ax1.xaxis.set_major_formatter(lon_formatter)
         # ax1.yaxis.set_major_formatter(lat_formatter)
-        plotunits = [i[i.find('['):]
-                     for i in rad_vars.keys() if var2plot == i][0]
-
         if pixel_midp:
             binx = rad_georef[f'grid_{proj_suffix}x'].ravel()
             biny = rad_georef[f'grid_{proj_suffix}y'].ravel()
@@ -570,9 +585,9 @@ def plot_ppi(rad_georef, rad_params, rad_vars, var2plot=None, coord_sys='rect',
                                           orientation=orientation,
                                           ticks=ticks,
                                           format=f'%.{cbtks_fmt}f')
-            cax.tick_params(direction='in', labelsize=12)
+            cax.tick_params(direction='in', labelsize=fsizes['fsz_cb'])
             cax.xaxis.set_ticks_position('top')
-            cax.set_title(plotunits, fontsize=14)
+            cax.set_title(plotunits, fontsize=fsizes['fsz_cbt'])
         make_colorbar(ax1, mappable, orientation='vertical')
         # plt.show()
     # return fig, ax1, mappable
@@ -664,7 +679,7 @@ def plot_setppi(rad_georef, rad_params, rad_vars, xlims=None, ylims=None,
             extend='max')
     if 'bbeam_height [km]' in bnd.keys():
         dnorm['nbeam_height [km]'] = mpc.BoundaryNorm(
-            bnd['bbeam_height [km]'], mpl.colormaps['gist_earth_r'].N,
+            bnd['bbeam_height [km]'], mpl.colormaps['gist_earth'].N,
             extend='max')
     if 'bAH [dB/km]' in bnd.keys():
         dnorm['nAH [dB/km]'] = mpc.BoundaryNorm(
@@ -747,6 +762,7 @@ def plot_setppi(rad_georef, rad_params, rad_vars, xlims=None, ylims=None,
                 b1, mpl.colormaps['tpylsc_rad_pvars'].N, extend='both')
         if '[dBZ]' in key:
             cmap = mpl.colormaps['tpylsc_rad_ref']
+            norm = dnorm.get('nZH [dBZ]')
         elif '[dB]' in key or '[deg/km]' in key:
             cmap = mpl.colormaps['tpylsc_rad_2slope']
         elif '[mm/h]' in key:
@@ -929,7 +945,7 @@ def plot_mgrid(rscans_georef, rscans_params, rscans_vars, var2plot=None,
             bnd['[mm]'], mpl.colormaps['tpylsc_rad_rainrt'].N, extend='max')
     if '[km]' in bnd.keys():
         dnorm['[km]'] = mpc.BoundaryNorm(
-            bnd['[km]'], mpl.colormaps['gist_earth_r'].N, extend='max')
+            bnd['[km]'], mpl.colormaps['gist_earth'].N, extend='max')
 
     # txtboxs = 'round, rounding_size=0.5, pad=0.5'
     # txtboxc = (0, -.09)
@@ -969,7 +985,7 @@ def plot_mgrid(rscans_georef, rscans_params, rscans_vars, var2plot=None,
                 tcks = bnd['[mm]']
                 cmaph.set_under('whitesmoke')
             if '[km]' in var2plot:
-                cmaph = mpl.colormaps['gist_earth_r']
+                cmaph = mpl.colormaps['gist_earth']
                 cbtks_fmt = 2
     else:
         cmaph = mpl.colormaps['tpylsc_rad_pvars']
@@ -995,7 +1011,7 @@ def plot_mgrid(rscans_georef, rscans_params, rscans_vars, var2plot=None,
             tcks = bnd['[mm]']
             cmaph.set_under('whitesmoke')
         if '[km]' in var2plot:
-            cmaph = mpl.colormaps['gist_earth_r']
+            cmaph = mpl.colormaps['gist_earth']
             cbtks_fmt = 2
     if ucmap is not None:
         cmaph = ucmap
@@ -1348,7 +1364,7 @@ def plot_cone_coverage(rad_georef, rad_params, rad_vars, var2plot=None,
             bnd['[mm]'], mpl.colormaps['tpylsc_rad_rainrt'].N, extend='max')
     if '[km]' in bnd.keys():
         dnorm['[km]'] = mpc.BoundaryNorm(
-            bnd['[km]'], mpl.colormaps['gist_earth_r'].N, extend='max')
+            bnd['[km]'], mpl.colormaps['gist_earth'].N, extend='max')
 
     if unorm is not None:
         dnorm.update(unorm)
@@ -1384,7 +1400,7 @@ def plot_cone_coverage(rad_georef, rad_params, rad_vars, var2plot=None,
                 cmaph.set_under('whitesmoke')
                 # cbtks_fmt = 1
             if '[km]' in var2plot:
-                cmaph = mpl.colormaps['gist_earth_r']
+                cmaph = mpl.colormaps['gist_earth']
                 cbtks_fmt = 2
     else:
         cmaph = mpl.colormaps['tpylsc_rad_pvars']
@@ -1411,7 +1427,7 @@ def plot_cone_coverage(rad_georef, rad_params, rad_vars, var2plot=None,
             tcks = bnd['[mm]']
             # cbtks_fmt = 1
         if '[km]' in var2plot:
-            cmaph = mpl.colormaps['gist_earth_r']
+            cmaph = mpl.colormaps['gist_earth']
             cbtks_fmt = 2
     if ucmap is not None:
         cmaph = mpl.colormaps[ucmap]
@@ -1454,14 +1470,17 @@ def plot_cone_coverage(rad_georef, rad_params, rad_vars, var2plot=None,
 
     # Plot the surface.
     ax.plot_surface(X, Y, Z, cmap=cmaph, norm=normp, facecolors=rgb,
-                    linewidth=0, antialiased=True, shade=False,  # cstride=1,
-                    rstride=1)
+                    rstride=1, cstride=8,
+                    # rcount=360, ccount=600,
+                    # rcount=360, ccount=150,
+                    linewidth=0, antialiased=True, shade=False,)
     if cbticks is not None:
         mappable2 = ax.contourf(X, Y, R, zdir='z', offset=0, levels=tcks,
-                                cmap=cmaph, norm=normp)
+                                cmap=cmaph, norm=normp, antialiased=True)
     else:
         mappable2 = ax.contourf(X, Y, R, zdir='z', offset=0, levels=tcks,
-                                cmap=cmaph, norm=normp, extend=normp.extend)
+                                cmap=cmaph, norm=normp, extend=normp.extend,
+                                antialiased=True)
     # Customize the axis.
     ax.set_xlim(xlims)
     ax.set_ylim(ylims)
@@ -1515,7 +1534,7 @@ def plot_snr(rad_georef, rad_params, snr_data, min_snr, coord_sys='rect',
     dtdes2 = f"{rad_params['datetime']:%Y-%m-%d %H:%M:%S}"
     ptitle = dtdes1 + dtdes2
     if fig_size is None:
-        fig_size = (10.5, 6.15)
+        fig_size = (10.5, 6.5)
     if coord_sys == 'polar':
         fig, (ax2, ax3) = plt.subplots(1, 2, figsize=fig_size,
                                        subplot_kw=dict(projection='polar'))
@@ -1550,6 +1569,8 @@ def plot_snr(rad_georef, rad_params, snr_data, min_snr, coord_sys='rect',
     elif coord_sys == 'rect':
         fig, (ax2, ax3) = plt.subplots(1, 2, figsize=fig_size,
                                        sharex=True, sharey=True)
+        fig.suptitle(f'{ptitle}', fontsize=16)
+        # Plots the SNR
         f2 = ax2.pcolormesh(rad_georef['grid_rectx'], rad_georef['grid_recty'],
                             snr_data['snr [dB]'], shading='auto',
                             cmap='tpylsc_rad_ref')
@@ -1568,27 +1589,31 @@ def plot_snr(rad_georef, rad_params, snr_data, min_snr, coord_sys='rect',
         ax2.set_xlabel('Distance from the radar [km]', fontsize=12,
                        labelpad=10)
         ax2.axes.set_aspect('equal')
-
-        mpl.colormaps['tpylc_div_yw_gy_bu'].set_bad(color='#505050')
-        # ax3.set_title('Signal (SNR>minSNR)')
-        ax3.set_title(f'{ptitle} \n' + f'SNR > minSNR [{min_snr:.2f}] \n' +
-                      '[Signal = Blue; Noise = Gray]', fontsize=14)
-        ax3.pcolormesh(rad_georef['grid_rectx'], rad_georef['grid_recty'],
-                       snr_data['snrclass'], shading='auto',
-                       cmap=mpl.colormaps['tpylc_div_yw_gy_bu'])
+        # Plots the Signal detection
+        f3 = ax3.pcolormesh(rad_georef['grid_rectx'], rad_georef['grid_recty'],
+                            snr_data['snrclass'],
+                            cmap=mpl.colormaps['tpylc_div_yw_gy_bu'],
+                            vmin=0, vmax=6,
+                            )
         ax3_divider = make_axes_locatable(ax3)
         cax3 = ax3_divider.append_axes("top", size="7%", pad="2%")
+        cb3 = fig.colorbar(f3, cax=cax3, orientation='horizontal')
+        cb3.ax.tick_params(direction='in', labelsize=10)
+        cb3.ax.set_title(f'Signal detection - SNR >= minSNR [{min_snr:.2f}]',
+                         fontsize=14)
+        cax3.xaxis.set_ticks_position("top")
+        cb3.set_ticks(ticks=[1., 3., 6.],
+                      labels=['Signal', 'Noise', ''])
         ax3.set_xlabel('Distance from the radar [km]', fontsize=12,
                        labelpad=10)
         ax3.tick_params(axis='both', which='major', labelsize=10)
         ax3.axes.set_aspect('equal')
-        cax3.remove()
         plt.tight_layout()
         plt.show()
 
 
-def plot_nmeclassif(rad_georef, rad_params, nme_classif, clutter_map=None,
-                    xlims=None, ylims=None, fig_size=None):
+def plot_nmeclassif(rad_georef, rad_params, nme_classif, echoesID,
+                    clutter_map=None, xlims=None, ylims=None, fig_size=None):
     """
     Plot a set of PPIs of polarimetric variables.
 
@@ -1608,12 +1633,6 @@ def plot_nmeclassif(rad_georef, rad_params, nme_classif, clutter_map=None,
     ylims : 2-element tuple or list, optional
         Set the y-axis view limits [min, max]. The default is None.
     """
-    if isinstance(rad_params['elev_ang [deg]'], str):
-        dtdes1 = f"{rad_params['elev_ang [deg]']} -- "
-    else:
-        dtdes1 = f"{rad_params['elev_ang [deg]']:{2}.{3}} deg. -- "
-    dtdes2 = f"{rad_params['datetime']:%Y-%m-%d %H:%M:%S}"
-    ptitle = dtdes1 + dtdes2
 
     # txtboxs = 'round, rounding_size=0.5, pad=0.5'
     # fc, ec = 'w', 'k'
@@ -1622,60 +1641,23 @@ def plot_nmeclassif(rad_georef, rad_params, nme_classif, clutter_map=None,
     # =========================================================================
     if fig_size is None:
         fig_size = (6, 6.15)
-    fig, axs = plt.subplots(figsize=fig_size)
-    ax = axs
-    ax.set_title(f'{ptitle} \n' + 'Clutter classification \n' +
-                 '[Precipitation = Blue; Clutter = Yellow; Noise = Gray]')
-    ax.pcolormesh(rad_georef['grid_rectx'], rad_georef['grid_recty'],
-                  nme_classif, shading='auto',
-                  cmap=mpl.colormaps['tpylc_div_yw_gy_bu'])
-    ax.tick_params(axis='both', labelsize=10)
-    ax.grid(color='gray', linestyle=':')
-    ax.set_xlabel('Distance from the radar [km]', labelpad=10)
-    ax.set_ylabel('Distance from the radar [km]', labelpad=10)
-    ax.axes.set_aspect('equal')
-    if xlims is not None:
-        ax.set_xlim(xlims)
-    if ylims is not None:
-        ax.set_ylim(ylims)
-    # txtboxc = (0, -.09)
-    # ax.annotate('| Created using Towerpy |', xy=txtboxc, fontsize=8,
-    #             xycoords='axes fraction', va='center', ha='center',
-    #             bbox=dict(boxstyle=txtboxs, fc=fc, ec=ec))
+    plot_ppi(rad_georef, rad_params, {'classif [EC]': nme_classif},
+             cbticks=echoesID, ucmap='tpylc_div_yw_gy_bu')
     plt.tight_layout()
-
+    # # txtboxc = (0, -.09)
+    # # ax.annotate('| Created using Towerpy |', xy=txtboxc, fontsize=8,
+    # #             xycoords='axes fraction', va='center', ha='center',
+    # #             bbox=dict(boxstyle=txtboxs, fc=fc, ec=ec))
     # =========================================================================
     #   Plot the Clutter Map
     # =========================================================================
     if clutter_map is not None:
         norm = mpc.BoundaryNorm(boundaries=np.linspace(0, 100, 11),
                                 ncolors=256)
-        if fig_size is None:
-            fig_size = (6, 6.5)
-        fig, axs = plt.subplots(figsize=fig_size)
-        ax = axs
-        f1 = ax.pcolormesh(rad_georef['grid_rectx'], rad_georef['grid_recty'],
-                           clutter_map*100, shading='auto',
-                           cmap='tpylsc_useq_bupkyw', norm=norm)
-        ax1_divider = make_axes_locatable(ax)
-        cax1 = ax1_divider.append_axes('top', size="7%", pad="2%")
-        cb1 = fig.colorbar(f1, cax=cax1,
-                           orientation='horizontal',
-                           # ticks=tcks
-                           )
-        cb1.ax.tick_params(direction='in', labelsize=10)
-        # cb1.ax.set_xticklabels(cb1.ax.get_xticklabels(), rotation=90)
-        cb1.ax.set_title('Clutter probability  (%)')
-        cax1.xaxis.set_ticks_position('top')
-        ax.tick_params(axis='both', labelsize=10)
-        ax.grid(color='gray', linestyle=':')
-        ax.set_xlabel('Distance from the radar [km]', labelpad=10)
-        ax.set_ylabel('Distance from the radar [km]', labelpad=10)
-        ax.axes.set_aspect('equal')
-        if xlims is not None:
-            ax.set_xlim(xlims)
-        if ylims is not None:
-            ax.set_ylim(ylims)
+        plot_ppi(rad_georef, rad_params,
+                 {'Clutter probability [%]': clutter_map},
+                 unorm={'Clutter probability [%]': norm},
+                 ucmap='tpylsc_useq_bupkyw')
         # txtboxc = (0, -.09)
         # ax.annotate('| Created using Towerpy |', xy=txtboxc, fontsize=8,
         #             xycoords='axes fraction', va='center', ha='center',
@@ -2203,30 +2185,28 @@ def plot_radprofiles(rad_profs, beam_height, mlyr=None, stats=None, ylims=None,
 
     Parameters
     ----------
-    rad_params : dict
-        Radar technical details.
-    beam_height : array
-        The beam height.
     rad_profs : dict
         Profiles generated by the PolarimetricProfiles class.
+    beam_height : array
+        The beam height.
     mlyr : MeltingLayer Class, optional
         Plots the melting layer within the polarimetric profiles.
         The default is None.
+    stats : dict, optional
+        Statistics of the profiles generation computed by the
+        PolarimetricProfiles class. The default is None.
     ylims : 2-element tuple or list, optional
         Set the y-axis view limits [min, max]. The default is None.
     vars_bounds : dict containing key and 3-element tuple or list, optional
         Boundaries [min, max] between which radar variables are
         to be plotted.
-    stats : dict, optional
-        Statistics of the profiles generation computed by the
-        PolarimetricProfiles class. The default is None.
     colours : Bool, optional
         Creates coloured profiles using norm to map colormaps.
-    ucmap : colormap, optional
-        User-defined colormap.
     unorm : matplotlib.colors normalisation object, optional
         User-defined normalisation method to map colormaps onto radar data.
         The default is None.
+    ucmap : colormap, optional
+        User-defined colormap.
     """
     fontsizelabels = 20
     fontsizetitle = 25
@@ -2363,12 +2343,28 @@ def plot_radprofiles(rad_profs, beam_height, mlyr=None, stats=None, ylims=None,
             # line = a.add_collection(lc)
             a.add_collection(lc)
             make_colorbar(a, lc, orientation='horizontal')
-            a.set_xlim([np.nanmin(value), np.nanmax(value)])
-        if stats:
-            a.fill_betweenx(beam_height,
-                            value + stats.get(key, value*np.nan),
-                            value - stats.get(key, value*np.nan),
-                            alpha=0.4, color='gray', label='std')
+            if np.isfinite(np.nanmin(value)) and np.isfinite(np.nanmax(value)):
+                a.set_xlim([np.nanmin(value), np.nanmax(value)])
+        # if stats:
+        #     a.fill_betweenx(beam_height,
+        #                     value + stats.get(key, value*np.nan),
+        #                     value - stats.get(key, value*np.nan),
+        #                     alpha=0.4, color='gray', label='std')
+        if stats == 'std_dev' or stats == 'sem':
+            if rad_profs.profs_type == 'VPs':
+                a.fill_betweenx(beam_height,
+                                value + rad_profs.vps_stats[stats][key],
+                                value - rad_profs.vps_stats[stats][key],
+                                alpha=0.4, label=f'{stats}')
+            if rad_profs.profs_type == 'QVPs':
+                a.fill_betweenx(beam_height,
+                                value + rad_profs.qvps_stats[stats][key],
+                                value - rad_profs.qvps_stats[stats][key],
+                                alpha=0.4, label=f'{stats}')
+            # a.fill_betweenx(beam_height,
+            #                 value + stats.get(key, value*np.nan),
+            #                 value - stats.get(key, value*np.nan),
+            #                 alpha=0.4, color='gray', label='std')
         if n == 0:
             a.set_ylabel('Height [km]', fontsize=fontsizelabels, labelpad=15)
         a.tick_params(axis='both', labelsize=fontsizetick)
@@ -2881,7 +2877,7 @@ def plot_ppidiff(rad_georef, rad_params, rad_var1, rad_var2, var2plot1=None,
             bnd['[mm]'], mpl.colormaps['tpylsc_rad_rainrt'].N, extend='max')
     if '[km]' in bnd.keys():
         dnorm['[km]'] = mpc.BoundaryNorm(
-            bnd['[km]'], mpl.colormaps['gist_earth_r'].N, extend='max')
+            bnd['[km]'], mpl.colormaps['gist_earth'].N, extend='max')
     if unorm is not None:
         dnorm.update(unorm)
     # =============================================================================
@@ -2923,7 +2919,7 @@ def plot_ppidiff(rad_georef, rad_params, rad_var1, rad_var2, var2plot1=None,
                 cmaph.set_under('whitesmoke')
                 # cbtks_fmt = 1
             if '[km]' in var2plot1:
-                cmaph = mpl.colormaps['gist_earth_r']
+                cmaph = mpl.colormaps['gist_earth']
                 cbtks_fmt = 2
     else:
         cmaph = mpl.colormaps['tpylsc_rad_pvars']
@@ -2951,7 +2947,7 @@ def plot_ppidiff(rad_georef, rad_params, rad_var1, rad_var2, var2plot1=None,
             tcks = bnd['[mm]']
             # cbtks_fmt = 1
         if '[km]' in var2plot1:
-            cmaph = mpl.colormaps['gist_earth_r']
+            cmaph = mpl.colormaps['gist_earth']
             cbtks_fmt = 2
         if '[dB/km]' in var2plot1:
             cbtks_fmt = 2

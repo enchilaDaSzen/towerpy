@@ -211,7 +211,7 @@ class AttenuationCorrection:
                       attc_method='ABRI', pdp_pxavr_rng=7, pdp_pxavr_azm=1,
                       pdp_dmin=20, coeff_alpha=[0.020, 0.1, 0.073],
                       coeff_a=[1e-5, 9e-5, 3e-5], coeff_b=[0.65, 0.85, 0.78],
-                      niter=500, plot_method=False):
+                      phidp0=0, niter=500, plot_method=False):
         r"""
         Calculate the attenuation of :math:`Z_{H}`.
 
@@ -279,6 +279,12 @@ class AttenuationCorrection:
         niter : int
             Number of iterations to find the optimised values of
             the coeffs :math:`a, b, \alpha`. The default is 500.
+        phidp0 : int , float or None
+            Adjusts the value (in deg) of :math:`\Phi_{DP}(r0)` for the whole
+            scan. If None, the function computes the value of the offset by
+            averaging the value of :math:`\Phi_{DP}` in the first ten
+            consecutive bins classified as rain, according to the cclass. The
+            default is 0.
         plot_method : Bool, optional
             Plot the ZH attenuation correction method. The default is False.
 
@@ -286,16 +292,23 @@ class AttenuationCorrection:
         -------
         vars : dict
             ZH [dBZ]:
-                Corrected reflectivity.
+                Corrected horizontal reflectivity
             AH [dB/km]:
-                Specific attenuation
+                Specific horizontal attenuation
             PhiDP [deg]:
-                Measured differential phase, but :math:`\Phi_{DP}(r0)`
-                is adjusted.
+                Processed and adjusted differential phase
             PhiDP* [deg]:
-                Computed differential phase according to Bringi's method.
+                Computed differential phase: Its availability depends on the
+                selected method.
+            KDP [deg/km]:
+                Specific differential phase, calculated using the equation
+                :math:`K_{DP}=A_H/\alpha`
+            PIA [dB]:
+                Path-Integrated Attenuation, calculated using the equation
+                :math:`PIA=\Phi_{DP}*\alpha`
             alpha:
-                parameter :math:`\alpha` optimised for each beam.
+                parameter :math:`\alpha` that represents the ratio
+                :math:`A_H/K_{DP}`
 
         Notes
         -----
@@ -338,6 +351,7 @@ class AttenuationCorrection:
             mlyr = MeltingLayer(self)
             mlyr.ml_top = 5
             mlyr.ml_thickness = 0.5
+            mlyr.ml_bottom = mlyr.ml_top - mlyr.ml_thickness
 
         if isinstance(mlyr.ml_top, (int, float)):
             mlgrid = np.zeros_like(
@@ -345,7 +359,7 @@ class AttenuationCorrection:
         elif isinstance(mlyr.ml_top, (np.ndarray, list, tuple)):
             mlgrid = (np.ones_like(
                 attvars['ZH [dBZ]'].T) * mlyr.ml_top * 1000).T
-        param_atc = np.zeros(15)
+        param_atc = np.zeros(16)
         nrays = len(rad_georef['azim [rad]'])
         ngates = len(rad_georef['range [m]'])
 
@@ -380,6 +394,10 @@ class AttenuationCorrection:
         param_atc[12] = coeff_alpha[1]  # maxalpha
         param_atc[13] = niter  # number of iterations
         param_atc[14] = mlyr.ml_thickness * 1000  # BB thickness in meters
+        if isinstance(phidp0, (int, float)):
+            param_atc[15] = phidp0
+        else:
+            param_atc[15] = -999  # PhiDP offset
         zhh_Ac = np.full(attvars['ZH [dBZ]'].shape, np.nan)
         Ah = np.full(attvars['ZH [dBZ]'].shape, np.nan)
         phidp_m = np.full(attvars['ZH [dBZ]'].shape, np.nan)
@@ -392,7 +410,9 @@ class AttenuationCorrection:
             param_atc, zhh_Ac, Ah, phidp_m, phidp_c, alpha)
         attcorr = {'ZH [dBZ]': zhh_Ac, 'AH [dB/km]': Ah, 'alpha [-]': alpha,
                    'PhiDP [deg]': phidp_m, 'PhiDP* [deg]': phidp_c}
-        attcorr['PIA [dB]'] = attcorr['PhiDP* [deg]'] * attcorr['alpha [-]']
+        attcorr['PIA [dB]'] = attcorr['PhiDP [deg]'] * attcorr['alpha [-]']
+        attcorr['PIA [dB]'][attcorr['PIA [dB]'] < 0] = 0
+        attcorr['AH [dB/km]'][attcorr['AH [dB/km]'] < 0] = 0
         attcorr['KDP [deg/km]'] = np.nan_to_num(
             attcorr['AH [dB/km]'] / attcorr['alpha [-]'])
 
@@ -405,9 +425,11 @@ class AttenuationCorrection:
         # Filter non met values
         # =====================================================================
         for key, values in attcorr.items():
-            values[cclass != 0] = np.nan
+            if np.array(values).ndim == 2:
+                values[cclass != 0] = np.nan
 
         self.vars = attcorr
+        self.phidp_offset = param_atc[15]
 
         if plot_method:
             rad_display.plot_zhattcorr(
@@ -419,7 +441,7 @@ class AttenuationCorrection:
 
     def zdr_correction(self, rad_georef, rad_params, attvars, attcorr_vars,
                        cclass, mlyr=None, attc_method='BRI',
-                       coeff_beta=[0.002, 0.07, 0.04],  beta_alpha_ratio=0.265,
+                       coeff_beta=[0.008, 0.1, 0.04], beta_alpha_ratio=0.265,
                        rhv_thld=0.985, mov_avrgf_len=9, minbins=10, p2avrf=5,
                        zh_zdr_model='linear', rparams=None, descr=False,
                        plot_method=False):

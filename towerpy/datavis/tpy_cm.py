@@ -151,11 +151,11 @@ def plot_color_gradients_cvd(cmap_list, cvd_type='protanomaly',
 
     Parameters
     ----------
-    cmap_list : TYPE
+    cmap_list : list
         DESCRIPTION.
-    cvd_type : TYPE, optional
+    cvd_type : str, optional
         DESCRIPTION. The default is 'protanomaly'.
-    severity : TYPE, optional
+    severity : float or int, optional
         DESCRIPTION. The default is 100.
 
     Returns

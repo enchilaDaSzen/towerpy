@@ -980,6 +980,8 @@ def hti_base(pol_profs, mlyrs=None, stats=None, var2plot=None, ptype='pseudo',
     if 'bV [m/s]' in bnd.keys():
         dnorm['nV [m/s]'] = mpc.BoundaryNorm(
             bnd['bV [m/s]'], tpycm_dv.N, extend='both')
+    if unorm is not None:
+        dnorm.update(unorm)
     if var2plot is None or var2plot == 'ZH [dBZ]':
         var2plot = 'ZH [dBZ]'
         prflv = var2plot
@@ -1004,8 +1006,7 @@ def hti_base(pol_profs, mlyrs=None, stats=None, var2plot=None, ptype='pseudo',
                 fcb = 2
     if ucmap is not None:
         cmaph = ucmap
-    if unorm is not None:
-        dnorm.update(unorm)
+    
     tcks = bnd.get('b'+var2plot)
 
     profsheight = np.array([nprof.georef['profiles_height [km]']
@@ -1138,16 +1139,11 @@ def hti_base(pol_profs, mlyrs=None, stats=None, var2plot=None, ptype='pseudo',
     htiplt.set_xlabel('Date and Time', fontsize=fontsizelabels, labelpad=15)
     htiplt.set_ylabel('Height [km]', fontsize=fontsizelabels, labelpad=15)
     locator = mdates.AutoDateLocator(minticks=3, maxticks=13)
-    formatter = mdates.ConciseDateFormatter(locator)
-    # formatter.offset_formats = ['',
-    #                             '%Y',
-    #                             '%b %Y',
-    #                             '%d %b %Y'
-    #                             ]
+    formatter = mdates.ConciseDateFormatter(locator, tz=tzi)
     htiplt.xaxis.set_major_locator(locator)
     htiplt.xaxis.set_major_formatter(formatter)
-    mpl.rcParams['xtick.labelsize'] = 20
-    mpl.rcParams['timezone'] = tz
+    htiplt.xaxis.get_offset_text().set_size(20)
+    # mpl.rcParams['timezone'] = tz
     # txtboxs = 'round, rounding_size=0.5, pad=0.5'
     # fc, ec = 'w', 'k'
     # htiplt.annotate('| Created using Towerpy |', xy=(0.02, -.1), fontsize=8,
@@ -1178,7 +1174,7 @@ def hti_base(pol_profs, mlyrs=None, stats=None, var2plot=None, ptype='pseudo',
     return radio
 
 
-mpl.rcParams['xtick.labelsize'] = 10
+# mpl.rcParams['xtick.labelsize'] = 10
 
 
 def ml_detectionvis(hbeam, profzh_norm, profrhv_norm, profcombzh_rhv,
@@ -1352,9 +1348,11 @@ def ml_detectionvis(hbeam, profzh_norm, profrhv_norm, profcombzh_rhv,
         amp = samp.val-1
         line.set_xdata(comb_mult_w[amp])
         if np.isfinite(mlrand[amp]['idxtop']):
-            mlts.set_ydata(hb_lim_it1[mlrand[amp]['idxtop']])
+            mlts.set_ydata((hb_lim_it1[mlrand[amp]['idxtop']],
+                           hb_lim_it1[mlrand[amp]['idxtop']]))
         if np.isfinite(mlrand[amp]['idxbot']):
-            mlbs.set_ydata(hb_lim_it1[mlrand[amp]['idxbot']])
+            mlbs.set_ydata((hb_lim_it1[mlrand[amp]['idxbot']],
+                           hb_lim_it1[mlrand[amp]['idxbot']]))
         fig.canvas.draw_idle()
 
     samp.on_changed(comb_slider)
