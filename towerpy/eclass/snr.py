@@ -30,11 +30,15 @@ class SNR_Classif:
             Radar variables with noise removed.
     """
 
-    def __init__(self, radobj):
-        self.file_name = radobj.file_name
-        self.site_name = radobj.site_name
-        self.elev_angle = radobj.elev_angle
-        self.scandatetime = radobj.scandatetime
+    def __init__(self, radobj=None):
+        self.elev_angle = getattr(radobj, 'elev_angle',
+                                  None) if radobj else None
+        self.file_name = getattr(radobj, 'file_name',
+                                 None) if radobj else None
+        self.scandatetime = getattr(radobj, 'scandatetime',
+                                    None) if radobj else None
+        self.site_name = getattr(radobj, 'site_name',
+                                 None) if radobj else None
 
     def signalnoiseratio(self, rad_georef, rad_params, rad_vars, min_snr=0,
                          rad_cst=None, snr_linu=False, data2correct=None,

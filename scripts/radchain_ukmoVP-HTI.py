@@ -3,13 +3,15 @@
 import pickle
 import towerpy as tp
 
-rsite = 'chenies'
-fdir = f'../datasets/{rsite}/y2020/spel8/'
+RSITE = 'chenies'
+# fdir = f'../datasets/{rsite}/y2020/spel8/'
+WDIR = ('/home/enchiladaszen/Documents/sciebo/codes/github/towerpy/'
+        + f'datasets/ukmo-nimrod/data/single-site/2020/{RSITE}/spel8/')
 
-with open(fdir+'vps.tpy', 'rb') as f:
+with open(WDIR+'vps.tpy', 'rb') as f:
     rprofs = pickle.load(f)
 
-with open(fdir+'mlyrs.tpy', 'rb') as f:
+with open(WDIR+'mlyrsvps.tpy', 'rb') as f:
     rmlyr = pickle.load(f)
 
 for i in rprofs:

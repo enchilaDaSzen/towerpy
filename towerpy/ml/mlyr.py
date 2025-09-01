@@ -31,15 +31,19 @@ class MeltingLayer:
         Thickness of the detected melting layer, in km.
     """
 
-    def __init__(self, radobj):
-        self.elev_angle = radobj.elev_angle
-        self.file_name = radobj.file_name
-        self.scandatetime = radobj.scandatetime
-        self.site_name = radobj.site_name
-        if hasattr(radobj, "profs_type"):
-            self.profs_type = radobj.profs_type
-        else:
-            self.profs_type = 'user-defined'
+    def __init__(self, radobj=None):
+        self.elev_angle = getattr(radobj, 'elev_angle',
+                                  None) if radobj else None
+        self.file_name = getattr(radobj, 'file_name',
+                                 None) if radobj else None
+        self.scandatetime = getattr(radobj, 'scandatetime',
+                                    None) if radobj else None
+        self.site_name = getattr(radobj, 'site_name',
+                                 None) if radobj else None
+        self.ml_source = getattr(radobj, 'profs_type',
+                                 'user-defined') if radobj else 'user-defined'
+        self.profs_type = getattr(radobj, 'profs_type',
+                                  'user-defined') if radobj else 'user-defined'
 
     def findpeaksboundaries(profile, pheight, param_w=0):
         """
@@ -208,7 +212,7 @@ class MeltingLayer:
         else:
             comb_idpy = None
 
-        if self.profs_type == 'VPs':
+        if self.profs_type.lower() == 'vps':
             if 'ZH [dBZ]' and 'rhoHV [-]' in pol_profs.vps:
                 profzh = pol_profs.vps['ZH [dBZ]'].copy()
                 profrhv = pol_profs.vps['rhoHV [-]'].copy()
@@ -241,7 +245,7 @@ class MeltingLayer:
                 print('gradV [dV/dh] profile was not found. A dummy one was '
                       'built to run the method.')
                 profdvel = np.ones_like(profzh)
-        elif self.profs_type == 'QVPs':
+        elif self.profs_type.lower() == 'qvps':
             if 'ZH [dBZ]' and 'rhoHV [-]' in pol_profs.qvps:
                 profzh = pol_profs.qvps['ZH [dBZ]'].copy()
                 profrhv = pol_profs.qvps['rhoHV [-]'].copy()
@@ -264,7 +268,7 @@ class MeltingLayer:
                 print(r'$Phi_{DP}$ profile was not found. A dummy one was '
                       'built to run the method.')
                 profpdp = np.ones_like(profzh)
-        elif self.profs_type == 'RD-QVPs':
+        elif self.profs_type.lower() == 'rd-qvps':
             if 'ZH [dBZ]' and 'rhoHV [-]' in pol_profs.rd_qvps:
                 profzh = pol_profs.rd_qvps['ZH [dBZ]'].copy()
                 profrhv = pol_profs.rd_qvps['rhoHV [-]'].copy()
@@ -331,7 +335,7 @@ class MeltingLayer:
             # else:
                 # min_hidx = idxml_btm_it1
             if idxml_top_it1 > min_hidx:
-                if self.profs_type == 'VPs':
+                if self.profs_type.lower() == 'vps':
                     n = 5
                     ncomb = [1-rut.normalisenan(
                         profdvel[idxml_btm_it1:idxml_top_it1]),
@@ -404,8 +408,8 @@ class MeltingLayer:
             self.ml_thickness = np.nan
             self.profpeakv = np.nan
 
-    def ml_ppidelimitation(self, rad_georef, rad_params, rad_vars,
-                           classid=None, plot_method=False):
+    def ml_ppidelimitation(self, rad_georef, rad_params, classid=None,
+                           plot_method=False):
         """
         Create a PPI depicting the limits of the melting layer.
 
@@ -416,8 +420,6 @@ class MeltingLayer:
             and beam height, amongst others.
         rad_params : dict
             Radar technical details.
-        rad_vars : dict
-            Radar variables used to identify the clutter echoes.
         classid : dict, optional
             Modifies the key/values of the melting layer delimitation
             (regionID). The default are the same as in regionID.
@@ -461,7 +463,7 @@ class MeltingLayer:
             mlb_idx = [rut.find_nearest(nbh, ml_bottom[cnt])
                        for cnt, nbh in
                        enumerate(rad_georef['beam_height [km]'])]
-        ashape = np.zeros_like(rad_vars[[i for i in rad_vars.keys()][0]])
+        ashape = np.zeros((rad_params['nrays'], rad_params['ngates']))
         for cnt, azi in enumerate(ashape):
             azi[:mlb_idx[cnt]] = self.regionID['rain']
             azi[mlt_idx[cnt]:] = self.regionID['solid_pcp']

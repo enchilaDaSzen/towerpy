@@ -23,11 +23,15 @@ class Attn_Refl_Relation:
         Name of the radar site.
     """
 
-    def __init__(self, radobj):
-        self.elev_angle = radobj.elev_angle
-        self.file_name = radobj.file_name
-        self.scandatetime = radobj.scandatetime
-        self.site_name = radobj.site_name
+    def __init__(self, radobj=None):
+        self.elev_angle = getattr(radobj, 'elev_angle',
+                                  None) if radobj else None
+        self.file_name = getattr(radobj, 'file_name',
+                                 None) if radobj else None
+        self.scandatetime = getattr(radobj, 'scandatetime',
+                                    None) if radobj else None
+        self.site_name = getattr(radobj, 'site_name',
+                                 None) if radobj else None
 
     def ah_zh(self, rad_vars, var2calc='ZH [dBZ]', rband='C', temp=20.,
               coeff_a=None, coeff_b=None, zh_lower_lim=20., zh_upper_lim=50.,
@@ -97,12 +101,16 @@ class Attn_Refl_Relation:
         """
         if coeff_a is None and coeff_b is None:
             # Default values for the temp
-            temps = np.array((0, 10, 20, 30))
+            temps = np.array((0, 10, 20, 30), dtype=np.float64)
             # Default values for C- and X-band radars
-            coeffs_a = {'X': np.array((1.62e-4, 1.15e-4, 7.99e-5, 5.5e-5)),
-                        'C': np.array((4.27e-5, 2.89e-5, 2.09e-5, 1.59e-5))}
-            coeffs_b = {'X': np.array((0.74, 0.78, 0.82, 0.86)),
-                        'C': np.array((0.73, 0.75, 0.76, 0.77))}
+            coeffs_a = {'X': np.array((1.62e-4, 1.15e-4, 7.99e-5, 5.5e-5),
+                                      dtype=np.float64),
+                        'C': np.array((4.27e-5, 2.89e-5, 2.09e-5, 1.59e-5),
+                                      dtype=np.float64)}
+            coeffs_b = {'X': np.array((0.74, 0.78, 0.82, 0.86),
+                                      dtype=np.float64),
+                        'C': np.array((0.73, 0.75, 0.76, 0.77),
+                                      dtype=np.float64)}
             # Interpolate the temp, and coeffs to set the coeffs
             icoeff_a = interp1d(temps, coeffs_a.get(rband))
             icoeff_b = interp1d(temps, coeffs_b.get(rband))
@@ -150,6 +158,16 @@ class Attn_Refl_Relation:
             # # Filter invalid values
             # ind = np.isnan(r_ahzh['ZH [dBZ]'])
             # r_ahzh['ZH [dBZ]'][ind] = rad_vars['ZH [dBZ]'][ind]
+            if copy_ofr and 'AH [dB/km]' in rad_vars.keys():
+                # Filter invalid values
+                # Use original values to populate with out-of-range values.
+                ind = np.isneginf(r_ahzh['AH [dB/km]'])
+                r_ahzh['AH [dB/km]'][ind] = rvars['AH [dB/km]'][ind]
+                ind = np.isnan(r_ahzh['AH [dB/km]'])
+                r_ahzh['AH [dB/km]'][ind] = rvars['AH [dB/km]'][ind]
+                ah_diff = rad_vars['AH [dB/km]'] - r_ahzh['AH [dB/km]']
+                ah_diff[np.isinf(ah_diff)] = np.nan
+                r_ahzh['diff [dB/km]'] = ah_diff
         self.vars = r_ahzh
         self.coeff_a = coeff_a
         self.coeff_b = coeff_b
@@ -234,12 +252,16 @@ class Attn_Refl_Relation:
         """
         if coeff_a is None and coeff_b is None:
             # Default values for the temp
-            temps = np.array((0, 10, 20, 30))
+            temps = np.array((0, 10, 20, 30), dtype=np.float64)
             # Default values for C- and X-band radars
-            coeffs_a = {'X': np.array((1.35e-4, 9.47e-5, 6.5e-5, 4.46e-5)),
-                        'C': np.array((3.87e-5, 2.67e-5, 1.97e-5, 1.53e-5))}
-            coeffs_b = {'X': np.array((0.78, 0.82, 0.86, 0.89)),
-                        'C': np.array((0.75, 0.77, 0.78, 0.78))}
+            coeffs_a = {'X': np.array((1.35e-4, 9.47e-5, 6.5e-5, 4.46e-5),
+                                      dtype=np.float64),
+                        'C': np.array((3.87e-5, 2.67e-5, 1.97e-5, 1.53e-5),
+                                      dtype=np.float64)}
+            coeffs_b = {'X': np.array((0.78, 0.82, 0.86, 0.89),
+                                      dtype=np.float64),
+                        'C': np.array((0.75, 0.77, 0.78, 0.78),
+                                      dtype=np.float64)}
             # Interpolate the temp, and coeffs to set the coeffs
             icoeff_a = interp1d(temps, coeffs_a.get(rband))
             icoeff_b = interp1d(temps, coeffs_b.get(rband))

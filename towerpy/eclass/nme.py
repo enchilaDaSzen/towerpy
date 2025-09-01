@@ -42,11 +42,15 @@ class NME_ID:
             Radar variables with clutter echoes removed.
     """
 
-    def __init__(self, radobj):
-        self.elev_angle = radobj.elev_angle
-        self.file_name = radobj.file_name
-        self.scandatetime = radobj.scandatetime
-        self.site_name = radobj.site_name
+    def __init__(self, radobj=None):
+        self.elev_angle = getattr(radobj, 'elev_angle',
+                                  None) if radobj else None
+        self.file_name = getattr(radobj, 'file_name',
+                                 None) if radobj else None
+        self.scandatetime = getattr(radobj, 'scandatetime',
+                                    None) if radobj else None
+        self.site_name = getattr(radobj, 'site_name',
+                                 None) if radobj else None
 
     def lsinterference_filter(self, rad_georef, rad_params, rad_vars,
                               rhv_min=0.3, classid=None, data2correct=None,
@@ -117,7 +121,8 @@ class NME_ID:
                             for nbin, vbin in enumerate(apad[nray])
                             if nbin != 0 and nbin != apad.shape[1]-1]
                            for nray in range(apad.shape[0])
-                           if nray != 0 and nray != apad.shape[0]-1])
+                           if nray != 0 and nray != apad.shape[0]-1],
+                          dtype=np.float64)
         spckl1[:, 0] = np.nan
         # Filter using rhohv threshold.
         spckl1[rad_vars['rhoHV [-]'] <= rhv_min] = np.nan
@@ -128,7 +133,8 @@ class NME_ID:
                             for nbin, vbin in enumerate(apad[nray])
                             if nbin != 0 and nbin != apad.shape[1]-1]
                            for nray in range(apad.shape[0])
-                           if nray != 0 and nray != apad.shape[0]-1])
+                           if nray != 0 and nray != apad.shape[0]-1],
+                          dtype=np.float64)
         spckl1[:, 0] = 1
         # Classifies the pixels according to echoesID
         fclass = np.where(np.isnan(rad_vars['ZH [dBZ]']), 3., 0.)
@@ -157,7 +163,7 @@ class NME_ID:
                                  ucmap='tpylc_div_yw_gy_bu')
 
     def clutter_id(self, rad_georef, rad_params, rad_vars, path_mfs=None,
-                   min_snr=0, binary_class=0, clmap=None, classid=None,
+                   min_snr=0, binary_class=255, clmap=None, classid=None,
                    data2correct=None, plot_method=False):
         r"""
         Classify between weather and clutter echoes.
@@ -192,7 +198,7 @@ class NME_ID:
                 :math:`\sigma(Z_{DR}) = 2`
 
                 :math:`\sigma(Z_{H}) = 1`
-            The default is 0.
+            The default is 255, i.e. all the variables are used.
         clmap : array, optional
             Clutter frequency map in the interval [0-1]. The default is None.
         classid : dict, optional
