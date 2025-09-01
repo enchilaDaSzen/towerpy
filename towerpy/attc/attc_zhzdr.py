@@ -38,15 +38,20 @@ class AttenuationCorrection:
         correction process.
     """
 
-    def __init__(self, radobj):
-        self.elev_angle = radobj.elev_angle
-        self.file_name = radobj.file_name
-        self.scandatetime = radobj.scandatetime
-        self.site_name = radobj.site_name
+    def __init__(self, radobj=None):
+        self.elev_angle = getattr(radobj, 'elev_angle',
+                                  None) if radobj else None
+        self.file_name = getattr(radobj, 'file_name',
+                                 None) if radobj else None
+        self.scandatetime = getattr(radobj, 'scandatetime',
+                                    None) if radobj else None
+        self.site_name = getattr(radobj, 'site_name',
+                                 None) if radobj else None
 
     def attc_phidp_prepro(self, rad_georef, rad_params, attvars,
                           mov_avrgf_len=(1, 3), t_spdp=10, minthr_pdp0=-5,
-                          rhohv_min=0.90, phidp0_correction=True):
+                          rhohv_min=0.90, phidp0_correction=False,
+                          mlyr=None):
         r"""
         Prepare :math:`\Phi_{DP}` for attenuation correction.
 
@@ -78,6 +83,11 @@ class AttenuationCorrection:
         phidp0_correction : Bool, optional
             If True, adjust :math:`\Phi_{DP}(r0)` for each individual
             ray.
+        mlyr : MeltingLayer Class, optional
+            Filter and interpolate PhiDP within the melting layer.
+            The ml_top (float, int, list or np.array) and ml_bottom
+            (float, int, list or np.array) must be explicitly defined.
+            The default is None.
 
         Notes
         -----
@@ -171,6 +181,18 @@ class AttenuationCorrection:
         phidp_f = np.array([nr - phidp0[cr]
                             for cr, nr in enumerate(phidp_f)],
                            dtype=np.float64)
+        # Filter and interpolate ML
+        if mlyr is not None:
+            if not getattr(mlyr, 'mlyr_limits', None):
+                mlyr.ml_ppidelimitation(rad_georef, rad_params)
+            phidp_fml = np.where(
+                mlyr.mlyr_limits['pcp_region [HC]'] == 2, np.nan, phidp_f)
+            itprng = np.array(range(ngates), dtype=np.float64)
+            phidp_fmli = np.array(
+                [interp_nan(itprng, nr, nan_type='nan') if ~np.isnan(nr).all()
+                 else nr for nr in phidp_fml], dtype=np.float64)
+            phidp_f = np.where(mlyr.mlyr_limits['pcp_region [HC]'] == 2,
+                               phidp_fmli, phidp_f)
         # Computes a MAV
         phidp_m = maf_radial(
             {'PhiDPi [deg]': phidp_f}, maf_len=mov_avrgf_len[1],
@@ -189,14 +211,14 @@ class AttenuationCorrection:
              for nr in range(phidp_pad.shape[0])], dtype=np.float64)
         phidp_m = phidp_m * phidp_f2
         # Interpolation and final filtering
-        itprng = np.array(range(ngates))
+        itprng = np.array(range(ngates), dtype=np.float64)
         phidp_i = {'PhiDPi [deg]': np.array(
             [interp_nan(itprng, nr, nan_type='nan') if ~np.isnan(nr).all()
              else nr for nr in phidp_m], dtype=np.float64)}
         phidp_i['PhiDPi [deg]'][:, : mov_avrgf_len[
             1] + 1] = phidp_f[:, : mov_avrgf_len[1] + 1]
         phidp_i = {'PhiDPi [deg]': np.array(
-            [fillnan1d(i) for i in phidp_i['PhiDPi [deg]']])}
+            [fillnan1d(i) for i in phidp_i['PhiDPi [deg]']], dtype=np.float64)}
         # Apply a moving average filter to the whole PPI
         phidp_maf = maf_radial(
             phidp_i, maf_len=mov_avrgf_len[1], maf_ignorenan=False,
@@ -415,10 +437,9 @@ class AttenuationCorrection:
         attcorr['AH [dB/km]'][attcorr['AH [dB/km]'] < 0] = 0
         attcorr['KDP [deg/km]'] = np.nan_to_num(
             attcorr['AH [dB/km]'] / attcorr['alpha [-]'])
-
-        alphacopy = np.zeros_like(attcorr['alpha [-]']) + attcorr['alpha [-]']
+        piacopy = np.zeros_like(attcorr['PIA [dB]']) + attcorr['PIA [dB]']
         for i in range(nrays):
-            idmx = np.nancumsum(alphacopy[i]).argmax()
+            idmx = np.nancumsum(piacopy[i]).argmax()
             if idmx != 0:
                 attcorr['PIA [dB]'][i][idmx+1:] = attcorr['PIA [dB]'][i][idmx]
         # =====================================================================

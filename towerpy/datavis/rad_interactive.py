@@ -7,7 +7,6 @@ import pickle
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import matplotlib.colors as mpc
 import matplotlib.dates as mdates
 from matplotlib.backend_bases import MouseButton
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
@@ -18,15 +17,7 @@ import matplotlib.ticker as mticker
 from scipy import spatial
 from ..utils import radutilities as rut
 from ..base import TowerpyError
-
-# warnings.filterwarnings("ignore", category=UserWarning)
-
-tpycm_ref = mpl.colormaps['tpylsc_rad_ref']
-tpycm_plv = mpl.colormaps['tpylsc_rad_pvars']
-tpycm_rnr = mpl.colormaps['tpylsc_rad_rainrt']
-tpycm_2slope = mpl.colormaps['tpylsc_rad_2slope']
-tpycm_dv = mpl.colormaps['tpylsc_div_dbu_rd']
-tpycm_3c = mpl.colormaps['tpylc_div_yw_gy_bu']
+from ..datavis.rad_display import pltparams
 
 
 def format_coord(x, y):
@@ -313,7 +304,8 @@ class PPI_Int:
         if gcoord_sys == 'polar':
             self.text.set_text(f'selected: {np.abs(nangle-359)}')
         elif gcoord_sys == 'rect' and nrange < ngates_m:
-            self.text.set_text(f'selected: {np.abs(nangle), nrange}')
+            self.text.set_text(f'selected: azim={np.abs(nangle)},'
+                               + f' bin_range={nrange}')
 
         figradint.canvas.draw()
 
@@ -370,9 +362,9 @@ class PPI_Int:
 
 
 def ppi_base(rad_georef, rad_params, rad_vars, var2plot=None, proj='rect',
-             vars_bounds=None, ppi_xlims=None, ppi_ylims=None, ucmap=None,
-             radial_xlims=None, radial_ylims=None, mlyr=None, cbticks=None,
-             fig_size=None):
+             mlyr=None, vars_bounds=None, ucmap=None, unorm=None, cbticks=None,
+             cb_ext=None, ppi_xlims=None, ppi_ylims=None, radial_xlims=None,
+             radial_ylims=None, fig_size=None):
     """
     Create the base display for the interactive PPI explorer.
 
@@ -390,34 +382,35 @@ def ppi_base(rad_georef, rad_params, rad_vars, var2plot=None, proj='rect',
         will plot ZH or the 'first' element in the rad_vars dict.
     proj : 'rect' or 'polar', optional
         Coordinates projection (polar or rectangular). The default is 'rect'.
+    mlyr : MeltingLayer Class, optional
+        Plot the melting layer height. ml_top (float, int, list or np.array)
+        and ml_bottom (float, int, list or np.array) must be explicitly
+        defined. The default is None.
     vars_bounds : dict containing key and 3-element tuple or list, optional
         Boundaries [min, max, nvals] between which radar variables are
-        to be mapped. The default are:
-            {'ZH [dBZ]': [-10, 60, 15],
-             'ZDR [dB]': [-2, 6, 17],
-             'PhiDP [deg]': [0, 180, 10], 'KDP [deg/km]': [-2, 6, 17],
-             'rhoHV [-]': [0.3, .9, 1],
-             'V [m/s]': [-5, 5, 11], 'gradV [dV/dh]': [-1, 0, 11],
-             'LDR [dB]': [-35, 0, 11],
-             'Rainfall [mm/h]': [0.1, 64, 11]}
+        to be mapped.
+    ucmap : colormap, optional
+        User-defined colormap, either a matplotlib.colors.ListedColormap,
+        or string from matplotlib.colormaps.
+    unorm : dict containing matplotlib.colors normalisation objects, optional
+        User-defined normalisation methods to map colormaps onto radar data.
+        The default is None.
+    cbticks : dict, optional
+        Modifies the default ticks' location (dict values) and labels
+        (dict keys) in the colour bar.
+    cb_ext : dict containing key and str, optional
+        The str modifies the end(s) for out-of-range values for a
+        given key (radar variable). The str has to be one of 'neither',
+        'both', 'min' or 'max'.
     ppi_xlims : 2-element tuple or list, optional
         Set the x-axis view limits [min, max] in the PPI. The default is None.
     ppi_ylims : 2-element tuple or list, optional
         Set the y-axis view limits [min, max] in the PPI. The default is None.
-    ucmap : colormap, optional
-        User-defined colormap.
     radial_xlims : 2-element tuple or list, optional
         Set the x-axis view limits [min, max] in the PPI. The default is None.
     radial_ylims : dict containing key and 2-element tuple or list, optional
         Set the y-axis view limits [min, max] in the radial variables. Key must
         be in rad_vars dict. The default is None.
-    mlyr : MeltingLayer Class, optional
-        Plot the melting layer height. ml_top (float, int, list or np.array)
-        and ml_bottom (float, int, list or np.array) must be explicitly
-        defined. The default is None.
-    cbticks : dict, optional
-        Modifies the default ticks' location (dict values) and labels
-        (dict keys) in the colour bar.
     fig_size : 2-element tuple or list, optional
         Modify the default plot size.
     """
@@ -429,15 +422,6 @@ def ppi_base(rad_georef, rad_params, rad_vars, var2plot=None, proj='rect',
     ptitle = dtdes1 + dtdes2
     nangle = 1
     nrange = 1
-    lpv = {'ZH [dBZ]': [-10, 60, 15], 'ZDR [dB]': [-2, 6, 17],
-           'PhiDP [deg]': [0, 180, 10], 'KDP [deg/km]': [-2, 6, 17],
-           'rhoHV [-]': [0.3, .9, 1], 'V [m/s]': [-5, 5, 11],
-           'gradV [dV/dh]': [-1, 0, 11],  # 'LDR [dB]': [-35, 0, 11],
-           'Rainfall [mm/h]': [0.1, 64, 11], 'Rainfall [mm]': [0, 200, 14],
-           'beam_height [km]': [0, 7, 36]}
-    if vars_bounds is not None:
-        lpv.update(vars_bounds)
-
     # global figradint, intradgs, f3_axvar2plot, f3_axhbeam, heightbeamint
     global figradint, intradgs, f3_axvar2plot, f3_axhbeam, gcoord_sys
     global intradgeoref, intradparams, intradvars, intradaxs
@@ -473,12 +457,6 @@ def ppi_base(rad_georef, rad_params, rad_vars, var2plot=None, proj='rect',
 
     gcoord_sys = proj
     intradgeoref, intradparams, intradvars = rad_georef, rad_params, rad_vars
-    # heightbeamint = rad_georef['beam_height [km]']
-    # intradarrange = rad_georef['range [m]']
-    # gres_m = rad_params['gateres [m]']
-    # ngates_m = rad_params['ngates']
-    # ['range [m]']
-    # gres_m = intradparams['gateres [m]']
 
     if radial_xlims is not None:
         vars_xlim = radial_xlims
@@ -496,134 +474,17 @@ def ppi_base(rad_georef, rad_params, rad_vars, var2plot=None, proj='rect',
         intradgs = figradint.add_gridspec(len(rad_vars), 4)
     else:
         intradgs = figradint.add_gridspec(len(rad_vars)+3, 4)
-
-    bnd = {key[key.find('['):]: np.linspace(value[0], value[1], value[2])
-           if 'rhoHV' not in key
-           else np.hstack((np.linspace(value[0], value[1], 4)[:-1],
-                           np.linspace(value[1], value[2], 11)))
-           for key, value in lpv.items()}
-    if vars_bounds is None or 'Rainfall [mm/h]' not in vars_bounds.keys():
-        bnd['[mm/h]'] = np.array((0.1, 1, 2, 4, 8, 12, 16, 20, 24, 30,
-                                  36, 48, 56, 64))
-    if vars_bounds is None or 'Rainfall [mm]' not in vars_bounds.keys():
-        bnd['[mm]'] = np.array((0.1, 1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50,
-                                75, 100, 150, 200))
-
-    dnorm = {key: mpc.BoundaryNorm(
-        value, mpl.colormaps['tpylsc_rad_pvars'].N, extend='both')
-             for key, value in bnd.items()}
-    if '[dBZ]' in bnd.keys():
-        dnorm['[dBZ]'] = mpc.BoundaryNorm(
-            bnd['[dBZ]'], mpl.colormaps['tpylsc_rad_ref'].N, extend='both')
-    if '[-]' in bnd.keys():
-        dnorm['[-]'] = mpc.BoundaryNorm(
-            bnd['[-]'], mpl.colormaps['tpylsc_rad_pvars'].N, extend='min')
-    if '[dB]' in bnd.keys():
-        dnorm['[dB]'] = mpc.BoundaryNorm(
-            bnd['[dB]'], mpl.colormaps['tpylsc_rad_2slope'].N, extend='both')
-    if '[deg/km]' in bnd.keys():
-        dnorm['[deg/km]'] = mpc.BoundaryNorm(
-            bnd['[deg/km]'], mpl.colormaps['tpylsc_rad_2slope'].N,
-            extend='both')
-    if '[m/s]' in bnd.keys():
-        dnorm['[m/s]'] = mpc.BoundaryNorm(
-            bnd['[m/s]'], mpl.colormaps['tpylsc_div_dbu_rd'].N, extend='both')
-    if '[mm/h]' in bnd.keys():
-        dnorm['[mm/h]'] = mpc.BoundaryNorm(
-            bnd['[mm/h]'], mpl.colormaps['tpylsc_rad_rainrt'].N, extend='max')
-    if '[mm]' in bnd.keys():
-        dnorm['[mm]'] = mpc.BoundaryNorm(
-            bnd['[mm]'], mpl.colormaps['tpylsc_rad_rainrt'].N, extend='max')
-    if '[km]' in bnd.keys():
-        dnorm['[km]'] = mpc.BoundaryNorm(
-            bnd['[km]'], mpl.colormaps['gist_earth_r'].N, extend='max')
-
-    fcb = 1
-
-    if var2plot is None or var2plot == 'ZH [dBZ]':
-        if 'ZH [dBZ]' in rad_vars.keys():
-            cmaph, normp = tpycm_ref, dnorm['[dBZ]']
-            polradv = 'ZH [dBZ]'
-            mrv = rad_vars[polradv]
-            tcks = bnd['[dBZ]']
-            fcb = 0
-        else:
-            polradv = list(rad_vars.keys())[0]
-            cmaph = tpycm_plv
-            normp = dnorm.get(polradv[polradv.find('['):])
-            mrv = rad_vars[polradv]
-            # fcb = 0
-            if '[-]' in polradv:
-                fcb = 2
-                cmaph = tpycm_plv
-                tcks = bnd['[-]']
-            if '[dB]' in polradv:
-                cmaph = tpycm_2slope
-                fcb = 1
-            if '[deg/km]' in polradv:
-                cmaph = tpycm_2slope
-                fcb = 1
-            if '[m/s]' in polradv:
-                cmaph = tpycm_dv
-            if '[mm/h]' in polradv:
-                cmaph = mpl.colormaps['tpylsc_rad_rainrt']
-                tcks = bnd['[mm/h]']
-                cmaph.set_under('whitesmoke')
-                fcb = 1
-            if '[mm]' in polradv:
-                cmaph = mpl.colormaps['tpylsc_rad_rainrt']
-                tcks = bnd['[mm]']
-                cmaph.set_under('whitesmoke')
-                fcb = 1
-            if '[km]' in polradv:
-                cmaph = mpl.colormaps['gist_earth_r']
-                fcb = 2
-            if '[dBZ]' in polradv:
-                cmaph, normp = tpycm_ref, dnorm['[dBZ]']
-                fcb = 0
-    else:
-        polradv = var2plot
-        mrv = rad_vars[polradv]
-        cmaph = tpycm_plv
-        normp = dnorm.get(polradv[polradv.find('['):])
-        fcb = 1
-        if '[-]' in polradv:
-            fcb = 2
-            cmaph = tpycm_plv
-            tcks = bnd['[-]']
-        if '[dB]' in polradv:
-            cmaph = tpycm_2slope
-            fcb = 1
-        if '[deg/km]' in polradv:
-            cmaph = tpycm_2slope
-            fcb = 1
-        if '[m/s]' in polradv:
-            cmaph = tpycm_dv
-        if '[mm/h]' in polradv:
-            cmaph = mpl.colormaps['tpylsc_rad_rainrt']
-            tcks = bnd['[mm/h]']
-            cmaph.set_under('whitesmoke')
-            # fcb = 1
-        if '[mm]' in polradv:
-            cmaph = mpl.colormaps['tpylsc_rad_rainrt']
-            tcks = bnd['[mm]']
-            cmaph.set_under('whitesmoke')
-            fcb = 1
-        if '[km]' in polradv:
-            cmaph = mpl.colormaps['gist_earth_r']
-            fcb = 2
-        if '[dBZ]' in polradv:
-            cmaph, normp = tpycm_ref, dnorm['[dBZ]']
-            fcb = 0
-        if polradv in lpv:
-            if lpv.get(polradv)[0] > -1 and lpv.get(polradv)[1] < 1:
-                fcb = 2
-    if ucmap is not None:
-        cmaph = ucmap
+    lpv, bnd, cmaph, cmapext, dnorm, v2p, normp, cbtks_fmt, tcks = pltparams(
+        var2plot, rad_vars.keys(), vars_bounds, ucmap=ucmap, unorm=unorm,
+        cb_ext=cb_ext)
+    if var2plot is None:
+        var2plot = v2p
+    polradv = var2plot
+    cmapp = cmaph.get(polradv[polradv.find('['):],
+                      mpl.colormaps['tpylsc_rad_pvars'])
+    mrv = rad_vars[polradv]
     plotunits = [i[i.find('['):]
                  for i in rad_vars.keys() if polradv == i][0]
-    # tcks = bnd.get('b'+polradv)
-    tcks = bnd.get(polradv[polradv.find('['):])
 
     if gcoord_sys == 'rect':
         print('\n \n \n'
@@ -646,7 +507,7 @@ def ppi_base(rad_georef, rad_params, rad_vars, var2plot=None, proj='rect',
         f3rec = f3_axvar2plot.pcolormesh(rad_georef['grid_rectx'],
                                          rad_georef['grid_recty'],
                                          mrv, shading='auto',
-                                         cmap=cmaph, norm=normp)
+                                         cmap=cmapp, norm=normp)
         if cbticks is not None:
             clb = plt.colorbar(
                 f3rec, ax=f3_axvar2plot, ticks=list(cbticks.values()),
@@ -654,8 +515,8 @@ def ppi_base(rad_georef, rad_params, rad_vars, var2plot=None, proj='rect',
             clb.ax.tick_params(direction='in', labelsize=12, rotation=90)
         else:
             clb = plt.colorbar(
-                mpl.cm.ScalarMappable(norm=normp, cmap=cmaph),
-                ax=f3_axvar2plot, format=f'%.{fcb}f', ticks=tcks)
+                mpl.cm.ScalarMappable(norm=normp, cmap=cmapp),
+                ax=f3_axvar2plot, format=f'%.{cbtks_fmt}f', ticks=tcks)
             clb.ax.tick_params(direction='in', labelsize=12)
         f3_axvar2plot.axes.set_aspect('equal')
         clb.ax.set_title(plotunits, fontsize=14)
@@ -717,19 +578,20 @@ def ppi_base(rad_georef, rad_params, rad_vars, var2plot=None, proj='rect',
         f3pol = f3_axvar2plot.pcolormesh(rad_georef['theta'],
                                          rad_georef['rho'],
                                          np.flipud(mrv), shading='auto',
-                                         cmap=cmaph, norm=normp)
+                                         cmap=cmapp, norm=normp)
         if cbticks is not None:
             clb = plt.colorbar(
                 f3pol, ax=f3_axvar2plot, ticks=list(cbticks.values()),
                 format=mticker.FixedFormatter(list(cbticks.keys())))
         else:
-            clb = plt.colorbar(mpl.cm.ScalarMappable(norm=normp, cmap=cmaph),
+            clb = plt.colorbar(mpl.cm.ScalarMappable(norm=normp, cmap=cmapp),
                                ax=f3_axvar2plot)
         f3_axvar2plot.grid(color='gray', linestyle=':')
         f3_axvar2plot.set_theta_zero_location('N')
         f3_axvar2plot.set_thetagrids(np.arange(nangle, nangle+2))
         f3_axvar2plot.xaxis.grid(ls='-')
-        if not isinstance(rad_params['elev_ang [deg]'], str) and rad_params['elev_ang [deg]'] < 89:
+        if not isinstance(rad_params['elev_ang [deg]'],
+                          str) and rad_params['elev_ang [deg]'] < 89:
             plt.rgrids(np.arange(0, (rad_georef['range [m]'][-1]/1000)*1.1,
                                  5 * round((rad_georef['range [m]'][-1]/1000)
                                            / 25)),
@@ -762,6 +624,7 @@ def ppi_base(rad_georef, rad_params, rad_vars, var2plot=None, proj='rect',
 
     intradaxs[list(intradaxs)[-1]].set_xlabel('Range [Km]', fontsize=14)
     intradaxs[list(intradaxs)[-1]].tick_params(axis='both', labelsize=12)
+    plt.tight_layout()
 
 
 class HTI_Int:
@@ -823,7 +686,8 @@ class HTI_Int:
             if event.inaxes != htiplt:
                 return True
             tz = ZoneInfo(tzi)
-            tms = mdates.num2date(event.xdata).replace(tzinfo=tz).timestamp()
+            # tms = mdates.num2date(event.xdata).replace(tzinfo=tz).timestamp()
+            tms = mdates.num2date(event.xdata).timestamp()
             idxdate = rut.find_nearest(profsdtn, tms)
             yheight = event.ydata
             cdt = [idxdate, yheight]
@@ -877,9 +741,9 @@ class HTI_Int:
 
 
 def hti_base(pol_profs, mlyrs=None, stats=None, var2plot=None, ptype='pseudo',
-             contourl=None, ucmap=None, unorm=None, vars_bounds=None,
-             htixlim=None, htiylim=None, cbticks=None, fig_size=None,
-             tz='Europe/London'):
+             vars_bounds=None, contourl=None, ucmap=None, unorm=None,
+             htixlim=None, htiylim=None, cbticks=None, cb_ext=None,
+             fig_size=None, tz='Europe/London'):
     """
     Create the base display for the HTI.
 
@@ -898,24 +762,18 @@ def hti_base(pol_profs, mlyrs=None, stats=None, var2plot=None, ptype='pseudo',
     ptype : str, 'pseudo' or 'fcontour'
         Create a pseudocolor or filled contours plot.
         The default is 'pseudo'.
+    vars_bounds : dict containing key and 3-element tuple or list, optional
+        Boundaries [min, max, nvals] between which radar variables are
+        to be mapped.
     contourl : str, optional
         Draw contour lines of the specified radar variable.
         The default is None.
     ucmap : colormap, optional
-        User-defined colormap.
-    unorm : matplotlib.colors normalisation object, optional
-        User-defined normalisation method to map colormaps onto radar data.
+        User-defined colormap, either a matplotlib.colors.ListedColormap,
+        or string from matplotlib.colormaps.
+    unorm : dict containing matplotlib.colors normalisation objects, optional
+        User-defined normalisation methods to map colormaps onto radar data.
         The default is None.
-    vars_bounds : dict containing key and 3-element tuple or list, optional
-        Boundaries [min, max, nvals] between which radar variables are
-        to be mapped. The default are:
-            {'ZH [dBZ]': [-10, 60, 15],
-             'ZDR [dB]': [-2, 6, 17],
-             'PhiDP [deg]': [0, 180, 10], 'KDP [deg/km]': [-2, 6, 17],
-             'rhoHV [-]': [0.3, .9, 1],
-             'V [m/s]': [-5, 5, 11], 'gradV [dV/dh]': [-1, 0, 11],
-             'LDR [dB]': [-35, 0, 11],
-             'Rainfall [mm/h]': [0.1, 64, 11]}
     htixlim : 2-element tuple or list of datetime objects, optional
         Set the x-axis view limits [min, max]. The default is None.
     htiylim : 2-element tuple or list, optional
@@ -923,6 +781,10 @@ def hti_base(pol_profs, mlyrs=None, stats=None, var2plot=None, ptype='pseudo',
     cbticks : dict, optional
         Modifies the default ticks' location (dict values) and labels
         (dict keys) in the colour bar.
+    cb_ext : dict containing key and str, optional
+        The str modifies the end(s) for out-of-range values for a
+        given key (radar variable). The str has to be one of 'neither',
+        'both', 'min' or 'max'.
     fig_size : 2-element tuple or list, optional
         Modify the default plot size.
     tz : str
@@ -935,87 +797,13 @@ def hti_base(pol_profs, mlyrs=None, stats=None, var2plot=None, ptype='pseudo',
         A MPL radio button.
 
     """
-    lpv = {'ZH [dBZ]': [-10, 60, 15], 'ZDR [dB]': [-2, 6, 17],
-           'PhiDP [deg]': [0, 180, 10], 'KDP [deg/km]': [-2, 6, 17],
-           'rhoHV [-]': [0.3, .9, 1], 'V [m/s]': [-5, 5, 11],
-           'gradV [dV/dh]': [-1, 0, 11],  # 'LDR [dB]': [-35, 0, 11],
-           'Rainfall [mm/h]': [0.1, 64, 11], 'Rainfall [mm]': [0.1, 200, 14],
-           'beam_height [km]': [0, 7, 36]}
-    if vars_bounds is not None:
-        lpv.update(vars_bounds)
-    bnd = {'b'+key: np.linspace(value[0], value[1], value[2])
-           if 'rhoHV' not in key
-           else np.hstack((np.linspace(value[0], value[1], 4)[:-1],
-                           np.linspace(value[1], value[2], 11)))
-           for key, value in lpv.items()}
-    if vars_bounds is None or 'Rainfall [mm/h]' not in vars_bounds.keys():
-        bnd['[mm/h]'] = np.array((0.1, 1, 2, 4, 8, 12, 16, 20, 24, 30, 36, 48,
-                                 56, 64))
-    if vars_bounds is None or 'Rainfall [mm]' not in vars_bounds.keys():
-        bnd['[mm]'] = np.array((0.1, 1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50,
-                                75, 100, 150, 200))
-
-    dnorm = {'n'+key[1:]: mpc.BoundaryNorm(
-        value, tpycm_plv.N, extend='both')
-             for key, value in bnd.items()}
-    if 'bZH [dBZ]' in bnd.keys():
-        dnorm['nZH [dBZ]'] = mpc.BoundaryNorm(
-            bnd['bZH [dBZ]'], tpycm_ref.N, extend='both')
-    if 'bZV [dBZ]' in bnd.keys():
-        dnorm['nZV [dBZ]'] = mpc.BoundaryNorm(
-            bnd['bZV [dBZ]'], tpycm_ref.N, extend='both')
-    if 'brhoHV [-]' in bnd.keys():
-        dnorm['nrhoHV [-]'] = mpc.BoundaryNorm(
-            bnd['brhoHV [-]'], tpycm_plv.N, extend='min')
-    if 'bRainfall [mm/h]' in bnd.keys():
-        bnrr = mpc.BoundaryNorm(
-            bnd['bRainfall [mm/h]'], tpycm_rnr.N, extend='max')
-        dnorm['nRainfall [mm/h]'] = bnrr
-    if 'bZDR [dB]' in bnd.keys():
-        dnorm['nZDR [dB]'] = mpc.BoundaryNorm(
-            bnd['bZDR [dB]'], tpycm_2slope.N, extend='both')
-    if 'bKDP [deg/km]' in bnd.keys():
-        dnorm['nKDP [deg/km]'] = mpc.BoundaryNorm(
-            bnd['bKDP [deg/km]'], tpycm_2slope.N, extend='both')
-    if 'bV [m/s]' in bnd.keys():
-        dnorm['nV [m/s]'] = mpc.BoundaryNorm(
-            bnd['bV [m/s]'], tpycm_dv.N, extend='both')
-    if unorm is not None:
-        dnorm.update(unorm)
-    if var2plot is None or var2plot == 'ZH [dBZ]':
-        var2plot = 'ZH [dBZ]'
-        prflv = var2plot
-        cmaph, normp = tpycm_ref, dnorm['nZH [dBZ]']
-        tcks = bnd['bZH [dBZ]']
-        fcb = 0
-    else:
-        prflv = var2plot
-        cmaph = tpycm_plv
-        normp = dnorm.get('n'+var2plot)
-        fcb = 0
-        if '[dB]' in var2plot or '[deg/km]' in var2plot:
-            cmaph = tpycm_2slope
-            fcb = 1
-        if '[m/s]' in var2plot:
-            cmaph = tpycm_dv.reversed()
-        if '[dV/dh]' in var2plot:
-            cmaph = tpycm_dv
-            fcb = 1
-        if var2plot in lpv:
-            if lpv.get(var2plot)[0] > -1 and lpv.get(var2plot)[1] < 1:
-                fcb = 2
-    if ucmap is not None:
-        cmaph = ucmap
-    
-    tcks = bnd.get('b'+var2plot)
-
     profsheight = np.array([nprof.georef['profiles_height [km]']
                             for nprof in pol_profs]).T
-    if pol_profs[0].profs_type == 'RD-QVPs':
+    if pol_profs[0].profs_type.lower() == 'rd-qvps':
         profsdt = [nprof.scandatetime[0] for nprof in pol_profs]
     else:
         profsdt = [nprof.scandatetime for nprof in pol_profs]
-    if pol_profs[0].profs_type == 'VPs':
+    if pol_profs[0].profs_type.lower() == 'vps':
         profsvars = {k: np.array([nprof.vps[k] for nprof in pol_profs]).T
                      for k in pol_profs[0].vps.keys()}
         if stats == 'std_dev' or stats == 'sem':
@@ -1024,9 +812,7 @@ def hti_base(pol_profs, mlyrs=None, stats=None, var2plot=None, ptype='pseudo',
                          for k in pol_profs[0].vps_stats[stats].keys()}
         else:
             profsstat = None
-        # elif:
-
-    elif pol_profs[0].profs_type == 'QVPs':
+    elif pol_profs[0].profs_type.lower() == 'qvps':
         profsvars = {k: np.array([nprof.qvps[k] for nprof in pol_profs]).T
                      for k in pol_profs[0].qvps.keys()}
         # TODO add max/min visualisation
@@ -1036,10 +822,18 @@ def hti_base(pol_profs, mlyrs=None, stats=None, var2plot=None, ptype='pseudo',
                          for k in pol_profs[0].qvps_stats[stats].keys()}
         else:
             profsstat = None
-    elif pol_profs[0].profs_type == 'RD-QVPs':
+    elif pol_profs[0].profs_type.lower() == 'rd-qvps':
         profsvars = {k: np.array([nprof.rd_qvps[k] for nprof in pol_profs]).T
                      for k in pol_profs[0].rd_qvps.keys()}
         profsstat = None
+    lpv, bnd, cmaph, cmapext, dnorm, v2p, normp, cbtks_fmt, tcks = pltparams(
+        var2plot, profsvars, vars_bounds, ucmap=ucmap, unorm=unorm,
+        cb_ext=cb_ext)
+    if var2plot is None:
+        var2plot = v2p
+    prflv = var2plot
+    cmapp = cmaph.get(prflv[prflv.find('['):],
+                      mpl.colormaps['tpylsc_rad_pvars'])
     if mlyrs:
         mlyrtop = [mlyr.ml_top if isinstance(mlyr.ml_top, float) else np.nan
                    for mlyr in mlyrs]
@@ -1048,10 +842,11 @@ def hti_base(pol_profs, mlyrs=None, stats=None, var2plot=None, ptype='pseudo',
     else:
         mlyrtop = None
         mlyrbot = None
-    plotunits = [i[i.find('['):]
-                 for i in profsvars.keys() if var2plot == i][0]
+    # plotunits = [i[i.find('['):]
+    #              for i in profsvars.keys() if prflv == i][0]
+    plotunits = prflv[prflv.find('['):]
     plotvname = [i[:i.find('[')-1]
-                 for i in profsvars.keys() if var2plot == i][0]
+                 for i in profsvars.keys() if prflv == i][0]
 
     # -------------------------------------------------------------------------
     fontsizelabels = 24
@@ -1082,18 +877,18 @@ def hti_base(pol_profs, mlyrs=None, stats=None, var2plot=None, ptype='pseudo',
     htiplt = axd['A']
     if ptype is None or ptype == 'pseudo':
         htiplt.pcolormesh(profsdt, profsheight, profsvars[prflv],
-                          shading='auto', cmap=cmaph, norm=normp)
+                          shading='auto', cmap=cmapp, norm=normp)
     elif ptype == 'fcontour':
         htiplt.contourf(profsdt, profsheight[:, 0], profsvars[prflv],
-                        shading='auto', cmap=cmaph, norm=normp,
-                        levels=bnd.get('b'+var2plot))
+                        shading='auto', cmap=cmapp, norm=normp,
+                        levels=normp.boundaries)
     else:
         raise TowerpyError('Oops!... Check the selected plot type')
     if contourl is not None:
-        contourlp = htiplt.contour(profsdt, profsheight[:, 0],
-                                   profsvars[contourl],
-                                   levels=bnd.get('b'+contourl), colors='k',
-                                   alpha=0.4, zorder=10)
+        contourlp = htiplt.contour(
+            profsdt, profsheight[:, 0], profsvars[contourl], colors='k',
+            levels=bnd.get(contourl[contourl.find('['):]), alpha=0.4,
+            zorder=10)
         htiplt.clabel(contourlp, inline=True, fontsize=8)
     if mlyrt is not None:
         htiplt.plot(profsdt, mlyrt, lw=lwid, c=linec, ls='--',
@@ -1115,21 +910,22 @@ def hti_base(pol_profs, mlyrs=None, stats=None, var2plot=None, ptype='pseudo',
     cax1 = ax1_divider.append_axes("top", size="10%", pad="7%")
     if cbticks is not None:
         cb1 = figprofsint.colorbar(
-            mpl.cm.ScalarMappable(norm=normp, cmap=cmaph), ax=htiplt, cax=cax1,
+            mpl.cm.ScalarMappable(norm=normp, cmap=cmapp), ax=htiplt, cax=cax1,
             orientation="horizontal", ticks=list(cbticks.values()),
             format=mticker.FixedFormatter(list(cbticks.keys())),
             extend='neither')
         cb1.ax.tick_params(length=0, direction='in', labelsize=20)
     else:
-        if '[-]' in var2plot:
+        if '[-]' in prflv:
             cb1 = figprofsint.colorbar(
-                mpl.cm.ScalarMappable(norm=normp, cmap=cmaph), ax=htiplt,
-                ticks=tcks, format=f'%.{fcb}f', cax=cax1,
+                mpl.cm.ScalarMappable(norm=normp, cmap=cmapp), ax=htiplt,
+                ticks=tcks, format=f'%.{cbtks_fmt}f', cax=cax1,
                 orientation="horizontal")
         else:
             cb1 = figprofsint.colorbar(
-                mpl.cm.ScalarMappable(norm=normp, cmap=cmaph), ax=htiplt,
-                cax=cax1, format=f'%.{fcb}f', orientation="horizontal")
+                mpl.cm.ScalarMappable(norm=normp, cmap=cmapp), ax=htiplt,
+                cax=cax1, format=f'%.{cbtks_fmt}f',
+                orientation="horizontal")
         cb1.ax.tick_params(direction='in', labelsize=20)
     cb1.ax.set_ylabel(f'{plotvname} \n'
                       + f'{plotunits}', fontsize=15, labelpad=50)
@@ -1168,13 +964,10 @@ def hti_base(pol_profs, mlyrs=None, stats=None, var2plot=None, ptype='pseudo',
                          radio_props={'s': [45]})
     for txtr in radio.labels:
         txtr.set_fontsize(9)
-
+    plt.tight_layout()
     plt.show()
 
     return radio
-
-
-# mpl.rcParams['xtick.labelsize'] = 10
 
 
 def ml_detectionvis(hbeam, profzh_norm, profrhv_norm, profcombzh_rhv,

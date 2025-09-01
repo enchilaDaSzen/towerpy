@@ -22,11 +22,15 @@ class RadarQPE:
             Name of the radar site.
     """
 
-    def __init__(self, radobj):
-        self.elev_angle = radobj.elev_angle
-        self.file_name = radobj.file_name
-        self.scandatetime = radobj.scandatetime
-        self.site_name = radobj.site_name
+    def __init__(self, radobj=None):
+        self.elev_angle = getattr(radobj, 'elev_angle',
+                                  None) if radobj else None
+        self.file_name = getattr(radobj, 'file_name',
+                                 None) if radobj else None
+        self.scandatetime = getattr(radobj, 'scandatetime',
+                                    None) if radobj else None
+        self.site_name = getattr(radobj, 'site_name',
+                                 None) if radobj else None
 
     def adp_to_r(self, adp, rband='C', temp=20., a=None, b=None, mlyr=None,
                  beam_height=None):

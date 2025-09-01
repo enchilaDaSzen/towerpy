@@ -6,8 +6,28 @@ What’s New In Towerpy
 Summary – Release highlights
 ----------------------------
 
-**Latest release: v1.0.8**
+**Latest release: v1.0.9**
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Towerpy v1.0.9
+~~~~~~~~~~~~~~
+::
+  **Towerpy v1.0.9**
+  
+    **Release Date:** 1 Sep 2025
+
+
+    **New features**
+      #. **attc_phidp_prepro**: The melting layer can be used as input for processing PhiDP.
+      #. **plot_ppi**: Adds a feature to plot contour lines.
+
+    **Minor corrections**
+      #. **zh_correction**: Fix an issue when extending the PIA above the melting layer that may cause the use of np.nan as the last valid value.
+      #. **rad_display**: Parameters required for some plots are now encapsulated in a single function to reduce repetition and shorten code.
+      #. **plot_ppi, plot_setppi, plot_mgrid, plot_cone_coverage, plot_radprofiles, plot_ppidiff, ppi_base, hti_base**: Enables customisation of several plotting options.
+
+    **Deprecations**
+      #. **ALL MODULES**: radar objects are no longer strictly required to initialise the modules.
 
 Towerpy v1.0.8
 ~~~~~~~~~~~~~~
@@ -18,7 +38,7 @@ Towerpy v1.0.8
 
 
     **New features**
-      #. **attc.attc_zhzdr**: The *zh_correction* function has a new argument (*phidp0*) that sets the PhiDP(0) value for the attenuation correction. This change allows users to use a fixed value for PhiDP(0) but also to estimate it from the data. a new argument (*phidp0*) that sets the PhiDP(0) value for the attenuation correction. This change allows users to use a fixed value for PhiDP(0) but also to estimate it from the data.
+      #. **attc.attc_zhzdr**: The *zh_correction* function has a new argument (*phidp0*) that sets the PhiDP(0) value for the attenuation correction. This change allows users to use a fixed value for PhiDP(0) but also to estimate it from the data.
       #. **datavis.rad_display.plot_ppi**: The *font_sizes* argument was added to the *plot_ppi* function to allow users to set the font sizes of the plot.
   
     **Minor corrections**
@@ -114,7 +134,6 @@ Towerpy v1.0.4
 
     **Deprecations**
       #. 
-
 
 Towerpy v1.0.3
 ~~~~~~~~~~~~~~

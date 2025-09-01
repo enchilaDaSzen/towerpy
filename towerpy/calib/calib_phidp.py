@@ -32,11 +32,15 @@ class PhiDP_Calibration:
         Offset-corrected :math:`(\Phi_{DP})` and user-defined radar variables.
     """
 
-    def __init__(self, radobj):
-        self.elev_angle = radobj.elev_angle
-        self.file_name = radobj.file_name
-        self.scandatetime = radobj.scandatetime
-        self.site_name = radobj.site_name
+    def __init__(self, radobj=None):
+        self.elev_angle = getattr(radobj, 'elev_angle',
+                                  None) if radobj else None
+        self.file_name = getattr(radobj, 'file_name',
+                                 None) if radobj else None
+        self.scandatetime = getattr(radobj, 'scandatetime',
+                                    None) if radobj else None
+        self.site_name = getattr(radobj, 'site_name',
+                                 None) if radobj else None
 
     def offsetdetection_vps(self, pol_profs, mlyr=None, min_h=1.1, max_h=None,
                             zhmin=5, zhmax=30, rhvmin=0.98, minbins=2,
@@ -148,7 +152,7 @@ class PhiDP_Calibration:
             if plot_method:
                 var = 'PhiDP [deg]'
                 rad_var = np.array([i[boundaries_idx[0]:boundaries_idx[1]]
-                                    for i in rad_vars[var]])
+                                    for i in rad_vars[var]], dtype=np.float64)
                 rad_display.plot_offsetcorrection(
                     rad_georef, rad_params, rad_var,
                     var_offset=self.phidp_offset, var_name=var)
@@ -350,7 +354,7 @@ class PhiDP_Calibration:
               else 1 for nbin, vbin in enumerate(phidp_pad[nr])
               if nbin != 0
               and nbin < phidp_pad.shape[1] - mov_avrgf_len[1] + 2]
-             for nr in range(phidp_pad.shape[0])])
+             for nr in range(phidp_pad.shape[0])], dtype=np.float64)
         # Filter isolated values
         phidp_sfnv2 = np.array(
             [[np.nan if ~np.isnan(vbin)

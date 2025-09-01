@@ -164,6 +164,8 @@ class Rad_scan:
                 nvar = 6
             elif get_polvar == 'SQI [-]':
                 nvar = 7
+            elif get_polvar == 'LDR [dB]':
+                nvar = 1
             else:
                 raise TowerpyError(f'Oops!... The variable {nvar}'
                                    'cannot be retreived')
@@ -190,7 +192,11 @@ class Rad_scan:
             poldata['PhiDP [deg]'] = poldata.pop('Phidp [deg]')
         if any(not v for k, v in varnam.items()):
             poldata['Absphase_V [ ]'] = poldata.pop('')
-        poldata = dict(sorted(poldata.items(), reverse=True))
+        if any(v.startswith('CI [-') for k, v in varnam.items()):
+            poldata['CI [dB]'] = poldata.pop('CI [- ]')
+        if any(v.startswith('V') for k, v in varnam.items()):
+            poldata['V [m/s]'] = poldata.pop('V [m/s]')
+        # poldata = dict(sorted(poldata.items(), reverse=True))
         if exclude_vars is not None:
             evars = exclude_vars
             poldata = {k: val for k, val in poldata.items() if k not in evars}
