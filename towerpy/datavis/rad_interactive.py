@@ -47,7 +47,7 @@ def format_coord(x, y):
         q = id1[0][0]
         r = id1[1][0]
         z = mrv[id1[0][0], id1[1][0]]
-        if r < intradparams['ngates']-1:
+        if r < intradparams['ngates']:
             z = mrv[q, r]
             return f'x={x:1.4f}, y={y:1.4f}, z={z:1.4f} [{q},{r}]'
         else:
@@ -130,8 +130,9 @@ class PPI_Int:
         figradint.canvas.mpl_connect('button_press_event', self.on_pick)
         figradint.canvas.mpl_connect('key_press_event', self.on_press)
         figradint.canvas.mpl_connect('key_press_event', self.on_key)
-        self.lastind = 0
-        self.clickcoords = []
+        self.lastind = [0, 0]
+        self.keycoords = []
+        self.current_line = [None]
         self.text = f3_axvar2plot.text(0.01, 0.03, 'selected: none',
                                        transform=f3_axvar2plot.transAxes,
                                        va='top')
@@ -165,10 +166,6 @@ class PPI_Int:
             if event.button is MouseButton.RIGHT:
                 if event.inaxes != f3_axvar2plot:
                     return True
-                # nangle, nrange = quadangle(event.xdata, event.ydata,
-                #                            gres_m)
-                # if nangle >= 360:
-                #     nangle = 0
                 xy = [(event.xdata, event.ydata)]
                 distance, index = spatial.KDTree(gflat_coords).query(xy)
                 id1 = np.unravel_index(index, (intradparams['nrays'],
@@ -178,6 +175,16 @@ class PPI_Int:
                 cdt = [nangle, nrange]
                 print(f'azimuth {abs(nangle)}',
                       f'gate {int(np.round(nrange))}')
+                if self.current_line[0] is not None:
+                    self.current_line[0].remove()
+                # Define specific target point
+                x_target, y_target = xy[0]
+                # Draw the line
+                f3line, = f3_axvar2plot.plot([x_center, x_target],
+                                             [y_center, y_target],
+                                             'ok:', lw=2,  mfc='none')
+
+                self.current_line[0] = f3line
                 self.lastind = cdt
                 self.update()
 
@@ -200,8 +207,15 @@ class PPI_Int:
         else:
             inc = 1
 
+        if self.current_line[0] is not None:
+            self.current_line[0].remove()
+        x_ray = intradgeoref['grid_rectx'][self.lastind[0] + inc, :]
+        y_ray = intradgeoref['grid_recty'][self.lastind[0] + inc, :]
+        f3line, = f3_axvar2plot.plot(x_ray, y_ray, 'ok:', lw=2,  mfc='none',
+                                     markevery=[0,-1])
+        self.current_line[0] = f3line
         self.lastind[0] += inc
-        self.lastind[0] = np.clip(self.lastind[0], 0, 359)
+        self.lastind[0] = np.clip(self.lastind[0], 0, intradparams['nrays']-1)
         self.update()
 
     def on_key(self, event):
@@ -225,7 +239,7 @@ class PPI_Int:
             nangle = id1[0][0]
             nrange = id1[1][0]
             print('you pressed', event.key, nangle, nrange)
-            self.clickcoords.append((nangle, nrange, event.key))
+            self.keycoords.append((nangle, nrange, event.key))
 
     def update(self):
         """Update the interactive plot."""
@@ -321,7 +335,7 @@ class PPI_Int:
             Directory of the file to be saved.
 
         """
-        coord_lst = self.clickcoords
+        coord_lst = self.keycoords
         b = [[pcoords[0], pcoords[1], int(pcoords[2])]
              for pcoords in coord_lst]
         coord_lstnd = list(set([i for i in [tuple(i) for i in b]]))
@@ -361,7 +375,7 @@ class PPI_Int:
             print('A binary file was created at '+dir2save+fname+'.tpmc')
 
 
-def ppi_base(rad_georef, rad_params, rad_vars, var2plot=None, proj='rect',
+def ppi_base(rad_georef, rad_params, rad_vars, var2plot=None, coord_sys='polar',
              mlyr=None, vars_bounds=None, ucmap=None, unorm=None, cbticks=None,
              cb_ext=None, ppi_xlims=None, ppi_ylims=None, radial_xlims=None,
              radial_ylims=None, fig_size=None):
@@ -380,8 +394,8 @@ def ppi_base(rad_georef, rad_params, rad_vars, var2plot=None, proj='rect',
     var2plot : str, optional
         Key of the radar variable to plot. The default is None. This option
         will plot ZH or the 'first' element in the rad_vars dict.
-    proj : 'rect' or 'polar', optional
-        Coordinates projection (polar or rectangular). The default is 'rect'.
+    coord_sys : 'rect' or 'polar', optional
+        Coordinates system (polar or rectangular). The default is 'polar'.
     mlyr : MeltingLayer Class, optional
         Plot the melting layer height. ml_top (float, int, list or np.array)
         and ml_bottom (float, int, list or np.array) must be explicitly
@@ -415,11 +429,12 @@ def ppi_base(rad_georef, rad_params, rad_vars, var2plot=None, proj='rect',
         Modify the default plot size.
     """
     if isinstance(rad_params['elev_ang [deg]'], str):
-        dtdes1 = f"{rad_params['elev_ang [deg]']} -- "
+        dtdes1 = f"{rad_params['elev_ang [deg]']}"
     else:
-        dtdes1 = f"{rad_params['elev_ang [deg]']:{2}.{3}} deg. -- "
+        dtdes1 = f"{rad_params['elev_ang [deg]']:{2}.{2}} deg."
     dtdes2 = f"{rad_params['datetime']:%Y-%m-%d %H:%M:%S}"
-    ptitle = dtdes1 + dtdes2
+    dtdes0 = f"{rad_params['site_name']}"
+
     nangle = 1
     nrange = 1
     # global figradint, intradgs, f3_axvar2plot, f3_axhbeam, heightbeamint
@@ -427,9 +442,9 @@ def ppi_base(rad_georef, rad_params, rad_vars, var2plot=None, proj='rect',
     global intradgeoref, intradparams, intradvars, intradaxs
     global mrv, vars_xlim, vars_ylim, rbeamh_b, rbeamh_t, gflat_coords
 
-    if isinstance(rad_georef['beambottom_height [km]'], np.ndarray):
+    if 'beambottom_height [km]' in rad_georef and isinstance(rad_georef['beambottom_height [km]'], np.ndarray):
         rbeamh_b = rad_georef['beambottom_height [km]']
-    if isinstance(rad_georef['beamtop_height [km]'], np.ndarray):
+    if 'beamtop_height [km]' in rad_georef and isinstance(rad_georef['beamtop_height [km]'], np.ndarray):
         rbeamh_t = rad_georef['beamtop_height [km]']
     if mlyr is not None:
         if isinstance(mlyr.ml_top, (int, float)):
@@ -455,7 +470,7 @@ def ppi_base(rad_georef, rad_params, rad_vars, var2plot=None, proj='rect',
         mlb_idxy = np.array([rad_georef['grid_recty'][cnt, ix]
                              for cnt, ix in enumerate(mlb_idx)])
 
-    gcoord_sys = proj
+    gcoord_sys = coord_sys
     intradgeoref, intradparams, intradvars = rad_georef, rad_params, rad_vars
 
     if radial_xlims is not None:
@@ -483,8 +498,9 @@ def ppi_base(rad_georef, rad_params, rad_vars, var2plot=None, proj='rect',
     cmapp = cmaph.get(polradv[polradv.find('['):],
                       mpl.colormaps['tpylsc_rad_pvars'])
     mrv = rad_vars[polradv]
-    plotunits = [i[i.find('['):]
-                 for i in rad_vars.keys() if polradv == i][0]
+    plotunits = [i[i.find('['):] for i in rad_vars.keys() if polradv == i][0]
+    vnamettle = [i[:i.find('[')-1] for i in rad_vars.keys() if polradv == i][0]
+    ptitle = f"{dtdes0} -- {dtdes2} \n" + dtdes1 + f' [{vnamettle}]'
 
     if gcoord_sys == 'rect':
         print('\n \n \n'
@@ -497,9 +513,12 @@ def ppi_base(rad_georef, rad_params, rad_vars, var2plot=None, proj='rect',
               '  Press a number (0-9) to store the coordinates and value    \n'
               '  of the current position of the mouse pointer.              \n'
               '  These coordinate can be retrieved at                       \n'
-              '  ppiexplorer.clickcoords                                    \n'
+              '  ppiexplorer.keycoords                                    \n'
               ' =============================================================')
         # if coastl is not True:
+        global x_center, y_center
+        x_center = rad_georef['grid_rectx'].mean()
+        y_center = rad_georef['grid_recty'].mean()
         gflat_coords = [[j for j in i]
                         for i in zip(rad_georef['grid_rectx'].flat,
                                      rad_georef['grid_recty'].flat)]
@@ -571,14 +590,14 @@ def ppi_base(rad_georef, rad_params, rad_vars, var2plot=None, proj='rect',
               '  Press a number (0-9) to store the coordinates and value    \n'
               '  of the current position of the mouse pointer.              \n'
               '  These coordinate can be retrieved at                       \n'
-              '  ppiexplorer.clickcoords                                    \n'
+              '  ppiexplorer.keycoords                                    \n'
               ' =============================================================')
         f3_axvar2plot = figradint.add_subplot(intradgs[0:-1, 0:2],
                                               projection='polar')
-        f3pol = f3_axvar2plot.pcolormesh(rad_georef['theta'],
-                                         rad_georef['rho'],
-                                         np.flipud(mrv), shading='auto',
-                                         cmap=cmapp, norm=normp)
+        f3pol = f3_axvar2plot.pcolormesh(
+            *np.meshgrid(rad_georef['azim [rad]'],
+                         rad_georef['range [m]'] / 1000, indexing='ij'),
+            np.flipud(mrv), shading='auto', cmap=cmapp, norm=normp)
         if cbticks is not None:
             clb = plt.colorbar(
                 f3pol, ax=f3_axvar2plot, ticks=list(cbticks.values()),
@@ -900,6 +919,9 @@ def hti_base(pol_profs, mlyrs=None, stats=None, var2plot=None, ptype='pseudo',
                     path_effects=[pe.Stroke(linewidth=7, foreground='w'),
                                   pe.Normal()], label=r'$MLyr_{(B)}$')
         htiplt.scatter(profsdt, mlyrb, lw=2, s=3, c='grey')
+    # plot_bbh = True
+    # if plot_bbh:
+    #     htiplt.plot(profsdt, [i.bb_peakh for i in mlyrs])
     if htixlim is not None:
         htiplt.set_xlim(htixlim)
     if htiylim is not None:
@@ -982,11 +1004,11 @@ def ml_detectionvis(hbeam, profzh_norm, profrhv_norm, profcombzh_rhv,
     heightbeam = hbeam
     init_comb = comb_idpy
     hb_lim_it1 = heightbeam[idxml_btm_it1:idxml_top_it1]
+    if comb_mult_w:
+        # resimp1d = np.gradient(comb_mult_w[comb_idpy])
+        resimp2d = np.gradient(np.gradient(comb_mult_w[comb_idpy]))
 
-    # resimp1d = np.gradient(comb_mult_w[comb_idpy])
-    resimp2d = np.gradient(np.gradient(comb_mult_w[comb_idpy]))
-
-    fig, axs = plt.subplots(1, 3, sharey=True, figsize=(12, 10))
+    fig, axs = plt.subplots(1, 3, sharey=True, figsize=(14, 10))
     plt.subplots_adjust(left=0.096, right=0.934, top=0.986, bottom=0.091)
 
     # =============================================================================
@@ -998,11 +1020,10 @@ def ml_detectionvis(hbeam, profzh_norm, profrhv_norm, profcombzh_rhv,
              label=r'$1- \rho^{*}_{HV}$', lw=1.5, c='tab:red')
     ax1.plot(profcombzh_rhv, heightbeam[min_hidx:max_hidx],
              label=r'$P_{comb}$', lw=3, c='tab:blue')
-    ax1.scatter(profcombzh_rhv[pkscombzh_rhv['idxmax']],
-                heightbeam[min_hidx:max_hidx][pkscombzh_rhv['idxmax']], s=300,
-                marker="X", c='tab:orange', label='$P_{{peak}}$')
-    # ax1.axhline(peakcombzh_rhv+.75, c='gray', ls='dashed', lw=lw, alpha=.5,
-    #             label=r'$U_{{L}}$')
+    if ~np.isnan(pkscombzh_rhv['idxmax']):
+        ax1.scatter(profcombzh_rhv[pkscombzh_rhv['idxmax']],
+                    heightbeam[min_hidx:max_hidx][pkscombzh_rhv['idxmax']],
+                    s=300, marker="X", c='tab:orange', label='$P_{{peak}}$')
     ax1.axvline(param_k, c='k', ls=':', lw=2.5, label='k')
     ax1.set_xlim([-0.05, 1.05])
     # ax1.set_ylim([heightbeam[min_hidx], heightbeam[max_hidx]])
@@ -1031,34 +1052,35 @@ def ml_detectionvis(hbeam, profzh_norm, profrhv_norm, profcombzh_rhv,
     ax2 = axs[1]
     # =============================================================================
     ac = 0.7
-
-    ax2.plot(comb_mult[comb_idpy], hb_lim_it1,
-             label=f'$P^*_{{{comb_idpy+1}}}$', lw=1.5, c='tab:blue')
-    # ax2.plot(resimp1d, hb_lim_it1,
-    #           label=f"$P_{{{comb_idpy+1}}}^*'$", lw=3., c='tab:gray',
-    #           alpha=ac)
-    ax2.plot(-resimp2d, hb_lim_it1,
-             label=f"$-P_{{{comb_idpy+1}}}^*''$", lw=3., c='gold', alpha=ac)
-    ax2.plot(comb_mult_w[comb_idpy], hb_lim_it1,
-             # label=(f'$P^*_{{{comb_idpy+1}}}$-'+r'(w $\cdot$'
-             #        + f"$P_{{{comb_idpy+1}}}^*''$)"),
-             label=f'$P_{{{comb_idpy+1}}}$',
-             lw=3., c='tab:green', alpha=ac)
-    if ~np.isnan(mlrand[comb_idpy]['idxtop']):
-        ax2.scatter(comb_mult_w[comb_idpy][mlrand[comb_idpy]['idxtop']],
-                    hb_lim_it1[mlrand[comb_idpy]['idxtop']],
-                    s=300, marker='*', c='deeppink', alpha=0.5,
-                    label=f"$P_{{{comb_idpy+1}(top)}}$")
-    if ~np.isnan(mlrand[comb_idpy]['idxmax']):
-        ax2.scatter(comb_mult_w[comb_idpy][mlrand[comb_idpy]['idxmax']],
-                    hb_lim_it1[mlrand[comb_idpy]['idxmax']],
-                    s=300, marker="X", c='tab:orange', alpha=0.5,
-                    label=f"$P_{{{comb_idpy+1}(peak)}}$")
-    if ~np.isnan(mlrand[comb_idpy]['idxbot']):
-        ax2.scatter(comb_mult_w[comb_idpy][mlrand[comb_idpy]['idxbot']],
-                    hb_lim_it1[mlrand[comb_idpy]['idxbot']],
-                    s=300, marker='o', c='deeppink', alpha=0.5,
-                    label=f'$P_{{{comb_idpy+1}(bottom)}}$')
+    if comb_mult:
+        ax2.plot(comb_mult[comb_idpy], hb_lim_it1,
+                 label=f'$P^*_{{{comb_idpy+1}}}$', lw=1.5, c='tab:blue')
+        # ax2.plot(resimp1d, hb_lim_it1,
+        #           label=f"$P_{{{comb_idpy+1}}}^*'$", lw=3., c='tab:gray',
+        #           alpha=ac)
+        ax2.plot(-resimp2d, hb_lim_it1,
+                 label=f"$-P_{{{comb_idpy+1}}}^*''$", lw=3., c='gold', alpha=ac)
+        ax2.plot(comb_mult_w[comb_idpy], hb_lim_it1,
+                 # label=(f'$P^*_{{{comb_idpy+1}}}$-'+r'(w $\cdot$'
+                 #        + f"$P_{{{comb_idpy+1}}}^*''$)"),
+                 label=f'$P_{{{comb_idpy+1}}}$',
+                 lw=3., c='tab:green', alpha=ac)
+    if comb_mult_w:        
+        if ~np.isnan(mlrand[comb_idpy]['idxtop']):
+            ax2.scatter(comb_mult_w[comb_idpy][mlrand[comb_idpy]['idxtop']],
+                        hb_lim_it1[mlrand[comb_idpy]['idxtop']],
+                        s=300, marker='*', c='deeppink', alpha=0.5,
+                        label=f"$P_{{{comb_idpy+1}(top)}}$")
+        if ~np.isnan(mlrand[comb_idpy]['idxmax']):
+            ax2.scatter(comb_mult_w[comb_idpy][mlrand[comb_idpy]['idxmax']],
+                        hb_lim_it1[mlrand[comb_idpy]['idxmax']],
+                        s=300, marker="X", c='tab:orange', alpha=0.5,
+                        label=f"$P_{{{comb_idpy+1}(peak)}}$")
+        if ~np.isnan(mlrand[comb_idpy]['idxbot']):
+            ax2.scatter(comb_mult_w[comb_idpy][mlrand[comb_idpy]['idxbot']],
+                        hb_lim_it1[mlrand[comb_idpy]['idxbot']],
+                        s=300, marker='o', c='deeppink', alpha=0.5,
+                        label=f'$P_{{{comb_idpy+1}(bottom)}}$')
     ax2.tick_params(axis='x', labelsize=tks_fs)
     ax2.set_xlabel('(norm)', fontsize=lbl_fs, labelpad=10)
     ax2.tick_params(axis='both', labelsize=tks_fs)
@@ -1085,29 +1107,29 @@ def ml_detectionvis(hbeam, profzh_norm, profrhv_norm, profcombzh_rhv,
     # =============================================================================
     ax3.tick_params(axis='x', labelsize=tks_fs)
     ax3.set_xlabel('(norm)', fontsize=lbl_fs, labelpad=10)
-
-    # Create the figure and the line that we will manipulate
-    for i in range(0, len(comb_mult)):
-        ax3.plot(comb_mult_w[i], hb_lim_it1, c='silver',
-                 lw=2, alpha=.4, zorder=0)
-        if ~np.isnan(mlrand[i]['idxtop']):
-            ax3.scatter(comb_mult_w[i][mlrand[i]['idxtop']],
-                        hb_lim_it1[mlrand[i]['idxtop']],
-                        s=100, marker='*', c='silver')
-        if ~np.isnan(mlrand[i]['idxbot']):
-            ax3.scatter(comb_mult_w[i][mlrand[i]['idxbot']],
-                        hb_lim_it1[mlrand[i]['idxbot']],
-                        s=100, marker='o', c='silver')
-
-    line, = ax3.plot(comb_mult_w[init_comb], hb_lim_it1, lw=lw, c='tab:green')
-    if ~np.isnan(mlrand[init_comb]['idxtop']):
-        mlts = ax3.axhline(hb_lim_it1[mlrand[init_comb]['idxtop']],
-                           c='slateblue', ls='dashed', lw=lw, alpha=0.5,
-                           label=r'$MLyr_{(T)}$')
-    if ~np.isnan(mlrand[init_comb]['idxbot']):
-        mlbs = ax3.axhline(hb_lim_it1[mlrand[init_comb]['idxbot']],
-                           c='steelblue', ls='dashed', lw=lw, alpha=0.5,
-                           label=r'$MLyr_{(B)}$')
+    if comb_mult_w:        
+        # Create the figure and the line that we will manipulate
+        for i in range(0, len(comb_mult)):
+            ax3.plot(comb_mult_w[i], hb_lim_it1, c='silver',
+                     lw=2, alpha=.4, zorder=0)
+            if ~np.isnan(mlrand[i]['idxtop']):
+                ax3.scatter(comb_mult_w[i][mlrand[i]['idxtop']],
+                            hb_lim_it1[mlrand[i]['idxtop']],
+                            s=100, marker='*', c='silver')
+            if ~np.isnan(mlrand[i]['idxbot']):
+                ax3.scatter(comb_mult_w[i][mlrand[i]['idxbot']],
+                            hb_lim_it1[mlrand[i]['idxbot']],
+                            s=100, marker='o', c='silver')
+    
+        line, = ax3.plot(comb_mult_w[init_comb], hb_lim_it1, lw=lw, c='tab:green')
+        if ~np.isnan(mlrand[init_comb]['idxtop']):
+            mlts = ax3.axhline(hb_lim_it1[mlrand[init_comb]['idxtop']],
+                               c='slateblue', ls='dashed', lw=lw, alpha=0.5,
+                               label=r'$MLyr_{(T)}$')
+        if ~np.isnan(mlrand[init_comb]['idxbot']):
+            mlbs = ax3.axhline(hb_lim_it1[mlrand[init_comb]['idxbot']],
+                               c='steelblue', ls='dashed', lw=lw, alpha=0.5,
+                               label=r'$MLyr_{(B)}$')
     ax3.xaxis.set_major_formatter(mpl.ticker.FormatStrFormatter('%.2f'))
     ax3.xaxis.set_minor_locator(mpl.ticker.AutoMinorLocator())
     ax3.legend(fontsize=lgn_fs)
@@ -1121,33 +1143,33 @@ def ml_detectionvis(hbeam, profzh_norm, profrhv_norm, profcombzh_rhv,
     cax.set_facecolor('slategrey')
     at = AnchoredText('Use the slider to assess the \n' +
                       'performance of each profile \n' +
-                      'combination for detecting the ML.', loc='center',
+                      'combination for detecting the ML.',
                       # 'The 1st and 2nd derivative are \n' +
                       # ' also shown 10.5194/amt-14-2873-2021',
+                      loc='center',
                       prop=dict(size=12, color='white'), frameon=False)
     cax.add_artist(at)
-
-    # ax_amp = plt.axes([0.25, 0.15, 0.65, 0.03])
-    ax_amp = plt.axes([0.95, 0.15, 0.0225, 0.63])
-
-    # define the values to use for snapping
-    allowed_combs = np.linspace(1, len(comb_mult_w),
-                                len(comb_mult_w)).astype(int)
-    # create the sliders
-    samp = Slider(ax_amp, "Comb", 1, len(comb_mult_w), valinit=init_comb+1,
-                  valstep=allowed_combs, color="green", orientation="vertical")
-
-    def comb_slider(val):
-        amp = samp.val-1
-        line.set_xdata(comb_mult_w[amp])
-        if np.isfinite(mlrand[amp]['idxtop']):
-            mlts.set_ydata((hb_lim_it1[mlrand[amp]['idxtop']],
-                           hb_lim_it1[mlrand[amp]['idxtop']]))
-        if np.isfinite(mlrand[amp]['idxbot']):
-            mlbs.set_ydata((hb_lim_it1[mlrand[amp]['idxbot']],
-                           hb_lim_it1[mlrand[amp]['idxbot']]))
-        fig.canvas.draw_idle()
-
-    samp.on_changed(comb_slider)
-
+    
+    if comb_mult_w:
+        ax_amp = plt.axes([0.95, 0.15, 0.0225, 0.63])
+        # define the values to use for snapping
+        allowed_combs = np.linspace(1, len(comb_mult_w),
+                                    len(comb_mult_w)).astype(int)
+        # create the sliders
+        samp = Slider(ax_amp, "Comb", 1, len(comb_mult_w), valinit=init_comb+1,
+                      valstep=allowed_combs, color="green", orientation="vertical")
+    
+        def comb_slider(val):
+            amp = samp.val-1
+            line.set_xdata(comb_mult_w[amp])
+            if np.isfinite(mlrand[amp]['idxtop']):
+                mlts.set_ydata((hb_lim_it1[mlrand[amp]['idxtop']],
+                               hb_lim_it1[mlrand[amp]['idxtop']]))
+            if np.isfinite(mlrand[amp]['idxbot']):
+                mlbs.set_ydata((hb_lim_it1[mlrand[amp]['idxbot']],
+                               hb_lim_it1[mlrand[amp]['idxbot']]))
+            fig.canvas.draw_idle()
+    
+        samp.on_changed(comb_slider)
+    plt.tight_layout()
     plt.show()

@@ -1,6 +1,7 @@
 """Towerpy: an open-source toolbox for processing polarimetric radar data."""
 
 import numpy as np
+import xarray as xr
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.colors as mpc
@@ -58,10 +59,11 @@ def pltparams(var2plot, rad_varskeys, vars_bounds, ucmap=None, unorm=None,
            'Rainfall [mm/h]': [0, 64, 11], 'Rainfall [mm]': [0, 200, 14],
            'beam_height [km]': [0, 7, 36], 'SQI [0-1]': [0, 1, 11]}
     if var2plot is not None:
-        if var2plot == 'LDR [dB]' or 'LDR [dB]' in rad_varskeys:
-            lpv['LDR [dB]'] = [-30, 10, 17]
-        if var2plot == 'PIA [dB]' or 'PIA [dB]' in rad_varskeys:
-            lpv['PIA [dB]'] = [0, 20, 17]
+        if var2plot != 'ZDR [dB]':
+            if var2plot == 'LDR [dB]' or 'LDR [dB]' in rad_varskeys:
+                lpv['LDR [dB]'] = [-30, 10, 17]
+            if var2plot == 'PIA [dB]' or 'PIA [dB]' in rad_varskeys:
+                lpv['PIA [dB]'] = [0, 20, 17]
     if vars_bounds is not None:
         lpv.update(vars_bounds)
     if unorm is not None:
@@ -187,7 +189,7 @@ def pltparams(var2plot, rad_varskeys, vars_bounds, ucmap=None, unorm=None,
 
 def plot_ppi(rad_georef, rad_params, rad_vars, var2plot=None, mlyr=None,
              vars_bounds=None, ucmap=None, unorm=None, plot_contourl=None,
-             contour_kw=None, coord_sys='rect', cpy_feats=None, data_proj=None,
+             contour_kw=None, coord_sys='polar', cpy_feats=None, data_proj=None,
              proj_suffix='osgb', xlims=None, ylims=None, ring=None,
              range_rings=None, rd_maxrange=False, pixel_midp=False,
              points2plot=None, ptsvar2plot=None, cbticks=None, cb_ext=None,
@@ -228,7 +230,7 @@ def plot_ppi(rad_georef, rad_params, rad_vars, var2plot=None, mlyr=None,
     contour_kw:
        Additional keyword arguments passed to matplotlib.pyplot.contour.
     coord_sys : 'rect' or 'polar', optional
-        Coordinates system (polar or rectangular). The default is 'rect'.
+        Coordinates system (polar or rectangular). The default is 'polar'.
     cpy_feats : dict, optional
         Cartopy attributes to add to the map. The default are:
          {'status': False, 'add_land': False, 'add_ocean': False,
@@ -285,6 +287,8 @@ def plot_ppi(rad_georef, rad_params, rad_vars, var2plot=None, mlyr=None,
               'fsz_axtk': 10}
     if font_sizes == 'large':
         fsizes = {k1: v1 + 4 for k1, v1 in fsizes.items()}
+    # szpnts = 25
+    szpnts = None
     #
     lpv, bnd, cmaph, cmapext, dnorm, v2p, normp, cbtks_fmt, tcks = pltparams(
         var2plot, rad_vars.keys(), vars_bounds, ucmap=ucmap, unorm=unorm,
@@ -294,8 +298,6 @@ def plot_ppi(rad_georef, rad_params, rad_vars, var2plot=None, mlyr=None,
     cmapp = cmaph.get(var2plot[var2plot.find('['):],
                       mpl.colormaps['tpylsc_rad_pvars'])
 # =============================================================================
-    # dtdes0 = f"[{rad_params['site_name']}]"
-    # dtdes1 = f"{rad_params['elev_ang [deg]']:{2}.{3}} Deg."
     # txtboxs = 'round, rounding_size=0.5, pad=0.5'
     # txtboxc = (0, -.09)
     # fc, ec = 'w', 'k'
@@ -320,6 +322,7 @@ def plot_ppi(rad_georef, rad_params, rad_vars, var2plot=None, mlyr=None,
     if cpy_feats:
         cpy_features.update(cpy_feats)
     if cpy_features['status']:
+        coord_sys = 'rect'
         states_provinces = cfeature.NaturalEarthFeature(
             category='cultural',
             name='admin_1_states_provinces_lines',
@@ -335,8 +338,11 @@ def plot_ppi(rad_georef, rad_params, rad_vars, var2plot=None, mlyr=None,
         if isinstance(rad_params['elev_ang [deg]'], str):
             dtdes1 = f"{rad_params['elev_ang [deg]']} -- "
         else:
-            dtdes1 = f"{rad_params['elev_ang [deg]']:{2}.{1}f} deg. -- "
-        dtdes2 = f"{rad_params['datetime']:%Y-%m-%d %H:%M:%S}"
+            dtdes1 = f"{rad_params['elev_ang [deg]']:{2}.{2}f} deg. -- "
+        if rad_params['datetime']:
+            dtdes2 = f"{rad_params['datetime']:%Y-%m-%d %H:%M:%S}"
+        else:
+            dtdes2 = ''
         ptitle = dtdes1 + dtdes2
     else:
         ptitle = fig_title
@@ -348,9 +354,11 @@ def plot_ppi(rad_georef, rad_params, rad_vars, var2plot=None, mlyr=None,
             fig_size = (6, 6.15)
         fig, ax1 = plt.subplots(figsize=fig_size,
                                 subplot_kw=dict(projection='polar'))
-        mappable = ax1.pcolormesh(rad_georef['theta'], rad_georef['rho'],
-                                  np.flipud(rad_vars[var2plot]),
-                                  shading='auto', cmap=cmapp, norm=normp)
+        mappable = ax1.pcolormesh(
+            *np.meshgrid(rad_georef['azim [rad]'],
+                         rad_georef['range [m]'] / 1000, indexing='ij'),
+            np.flipud(rad_vars[var2plot]), shading='auto', cmap=cmapp,
+            norm=normp)
         ax1.set_title(f'{ptitle} \n' + f'PPI {var2plot}',
                       fontsize=fsizes['fsz_pt'])
         ax1.grid(color='gray', linestyle=':')
@@ -403,14 +411,14 @@ def plot_ppi(rad_georef, rad_params, rad_vars, var2plot=None, mlyr=None,
 # =============================================================================
         if points2plot is not None:
             if len(points2plot) == 2:
-                ax1.scatter(points2plot['grid_rectx'],
-                            points2plot['grid_recty'], color='k',
-                            marker='o', )
+                ax1.scatter(
+                    points2plot['grid_rectx'], points2plot['grid_recty'],
+                    color='k', marker='o', s=szpnts)
             elif len(points2plot) >= 3:
-                ax1.scatter(points2plot['grid_rectx'],
-                            points2plot['grid_recty'], marker='o',
-                            norm=normp, edgecolors='k',
-                            c=[points2plot[ptsvar2plot]], cmap=cmapp)
+                ax1.scatter(
+                    points2plot['grid_rectx'], points2plot['grid_recty'],
+                    marker='o', norm=normp, edgecolors='k', cmap=cmapp,
+                    c=[points2plot[ptsvar2plot]], s=szpnts)
 # =============================================================================
         if mlyr is not None:
             if isinstance(mlyr.ml_top, (int, float)):
@@ -531,7 +539,7 @@ def plot_ppi(rad_georef, rad_params, rad_vars, var2plot=None, mlyr=None,
         plt.tight_layout()
         # plt.show()
 
-    elif coord_sys == 'rect' and cpy_features['status']:
+    elif cpy_features['status']:
         # ptitle = dtdes1 + dtdes2
         proj = ccrs.PlateCarree()
         if fig_size is None:
@@ -650,12 +658,12 @@ def plot_ppi(rad_georef, rad_params, rad_vars, var2plot=None, mlyr=None,
             if len(points2plot) == 2:
                 ax1.scatter(points2plot[f'grid_{proj_suffix}x'],
                             points2plot[f'grid_{proj_suffix}y'], color='k',
-                            marker='o', )
+                            marker='o', s=szpnts)
             elif len(points2plot) >= 3:
                 ax1.scatter(points2plot[f'grid_{proj_suffix}x'],
                             points2plot[f'grid_{proj_suffix}y'],
-                            marker='o', norm=normp, edgecolors='k',
-                            c=[points2plot[ptsvar2plot]], cmap=cmapp)
+                            marker='o', norm=normp, edgecolors='k', s=szpnts,
+                            c=points2plot[ptsvar2plot], cmap=cmapp)
 
 # =============================================================================
         def make_colorbar(ax1, mappable, **kwargs):
@@ -762,8 +770,11 @@ def plot_setppi(rad_georef, rad_params, rad_vars, mlyr=None, vars_bounds=None,
     if isinstance(rad_params['elev_ang [deg]'], str):
         dtdes1 = rad_params['elev_ang [deg]']
     else:
-        dtdes1 = f"{rad_params['elev_ang [deg]']:{2}.{1}f} deg"
-    dtdes2 = f"{rad_params['datetime']:%Y-%m-%d %H:%M:%S}"
+        dtdes1 = f"{rad_params['elev_ang [deg]']:{2}.{2}f} deg"
+    if rad_params['datetime']:
+        dtdes2 = f"{rad_params['datetime']:%Y-%m-%d %H:%M:%S}"
+    else:
+        dtdes2 = ''
     if fig_title is None:
         ptitle = (f"{rad_params['site_name'].title()} "
                   + f"[{dtdes1}] -- {dtdes2}")
@@ -901,9 +912,8 @@ def plot_setppi(rad_georef, rad_params, rad_vars, mlyr=None, vars_bounds=None,
 
 def plot_mgrid(rscans_georef, rscans_params, rscans_vars, var2plot=None,
                vars_bounds=None, ucmap=None, unorm=None, cb_ext=None,
-               coord_sys='rect', cpy_feats=None, proj_suffix='osgb',
-               data_proj=None, xlims=None, ylims=None, ncols=None, nrows=None,
-               fig_size=None):
+               cpy_feats=None, proj_suffix='osgb', data_proj=None,
+               xlims=None, ylims=None, ncols=None, nrows=None, fig_size=None):
     """
     Graph multiple PPI scans into a grid.
 
@@ -941,7 +951,7 @@ def plot_mgrid(rscans_georef, rscans_params, rscans_vars, var2plot=None,
         given key (radar variable). The str has to be one of 'neither',
         'both', 'min' or 'max'.
     coord_sys : 'rect' or 'polar', optional
-        Coordinates system (polar or rectangular). The default is 'rect'.
+        Coordinates system (polar or rectangular). The default is 'polar'.
     cpy_feats : dict, optional
         Cartopy attributes to add to the map. The default are:
         {
@@ -1032,7 +1042,7 @@ def plot_mgrid(rscans_georef, rscans_params, rscans_vars, var2plot=None,
             + f"{p['datetime']:%Y-%m-%d %H:%M:%S}"
             if isinstance(p['elev_ang [deg]'], str)
             else
-            f"{p['elev_ang [deg]']:{2}.{3}} deg. -- "
+            f"{p['elev_ang [deg]']:{2}.{2}f} deg. -- "
             + f"{p['datetime']:%Y-%m-%d %H:%M:%S}"
             for p in rscans_params]
     if nrows is None and ncols is None:
@@ -1069,7 +1079,7 @@ def plot_mgrid(rscans_georef, rscans_params, rscans_vars, var2plot=None,
             print('Warning: Due to the selected grid, some variables may not '
                   + 'be displayed. Please adjust your settings to view all '
                   + 'available variables.')
-    if coord_sys == 'rect' and cpy_features['status'] is False:
+    if cpy_features['status'] is False:
         if fig_size is None:
             fig_size = (15, 5)
         fig = plt.figure(figsize=fig_size)
@@ -1107,7 +1117,7 @@ def plot_mgrid(rscans_georef, rscans_params, rscans_vars, var2plot=None,
                 grid2[-empax-1].remove()
         plt.tight_layout()
         plt.show()
-    elif coord_sys == 'rect' and cpy_features['status']:
+    elif cpy_features['status']:
         if fig_size is None:
             fig_size = (16, 6)
         fig = plt.figure(figsize=fig_size)
@@ -1294,8 +1304,11 @@ def plot_cone_coverage(rad_georef, rad_params, rad_vars, var2plot=None,
     if isinstance(rad_params['elev_ang [deg]'], str):
         dtdes1 = f"{rad_params['elev_ang [deg]']} -- "
     else:
-        dtdes1 = f"{rad_params['elev_ang [deg]']:{2}.{3}} deg. -- "
-    dtdes2 = f"{rad_params['datetime']:%Y-%m-%d %H:%M:%S}"
+        dtdes1 = f"{rad_params['elev_ang [deg]']:{2}.{2}} deg. -- "
+    if rad_params['datetime']:
+        dtdes2 = f"{rad_params['datetime']:%Y-%m-%d %H:%M:%S}"
+    else:
+        dtdes2 = ''
     ptitle = dtdes1 + dtdes2
     # txtboxs = 'round, rounding_size=0.5, pad=0.5'
     # txtboxc = (0, -.09)
@@ -1374,7 +1387,7 @@ def plot_cone_coverage(rad_georef, rad_params, rad_vars, var2plot=None,
     plt.show()
 
 
-def plot_snr(rad_georef, rad_params, snr_data, min_snr, coord_sys='rect',
+def plot_snr(rad_georef, rad_params, snr_data, min_snr, coord_sys='polar',
              ucmap_snr=None, fig_size=None):
     """
     Display the results of the SNR classification.
@@ -1389,23 +1402,28 @@ def plot_snr(rad_georef, rad_params, snr_data, min_snr, coord_sys='rect',
     snr_data : dict
         Results of the SNR_Classif method.
     proj : 'rect' or 'polar', optional
-        Coordinates system (polar or rectangular). The default is 'rect'.
+        Coordinates system (polar or rectangular). The default is 'polar'.
     """
     if isinstance(rad_params['elev_ang [deg]'], str):
         dtdes1 = f"{rad_params['elev_ang [deg]']} -- "
     else:
-        dtdes1 = f"{rad_params['elev_ang [deg]']:{2}.{3}} deg. -- "
-    dtdes2 = f"{rad_params['datetime']:%Y-%m-%d %H:%M:%S}"
+        dtdes1 = f"{rad_params['elev_ang [deg]']:{2}.{2}} deg. -- "
+    if rad_params['datetime']:
+        dtdes2 = f"{rad_params['datetime']:%Y-%m-%d %H:%M:%S}"
+    else:
+        dtdes2 = ''
+    
     ptitle = dtdes1 + dtdes2
     if fig_size is None:
         fig_size = (10.5, 6.5)
     if coord_sys == 'polar':
         fig, (ax2, ax3) = plt.subplots(1, 2, figsize=fig_size,
                                        subplot_kw=dict(projection='polar'))
-
-        f2 = ax2.pcolormesh(rad_georef['theta'], rad_georef['rho'],
-                            np.flipud(snr_data['snr [dB]']), shading='auto',
-                            cmap='tpylsc_rad_ref')
+        f2 = ax2.pcolormesh(
+            *np.meshgrid(rad_georef['azim [rad]'],
+                         rad_georef['range [m]'] / 1000, indexing='ij'),
+            np.flipud(snr_data['snr [dB]']), shading='auto',
+            cmap='tpylsc_rad_ref')
         # ax2.axes.set_aspect('equal')
         ax2.grid(color='gray', linestyle=':')
         ax2.set_theta_zero_location('N')
@@ -1419,9 +1437,11 @@ def plot_snr(rad_georef, rad_params, snr_data, min_snr, coord_sys='rect',
 
         ax3.set_title(f'Signal (SNR > minSNR [{min_snr:.2f}])', fontsize=14,
                       y=-0.15)
-        ax3.pcolormesh(rad_georef['theta'], rad_georef['rho'],
-                       np.flipud(snr_data['snrclass']), shading='auto',
-                       cmap=mpl.colormaps['tpylc_div_yw_gy_bu'])
+        ax3.pcolormesh(
+            *np.meshgrid(rad_georef['azim [rad]'],
+                         rad_georef['range [m]'] / 1000, indexing='ij'),
+            np.flipud(snr_data['snrclass']), shading='auto',
+            cmap=mpl.colormaps['tpylc_div_yw_gy_bu'])
         # ax3.axes.set_aspect('equal')
         ax3.grid(color='w', linestyle=':')
         ax3.set_theta_zero_location('N')
@@ -1625,8 +1645,11 @@ def plot_zhattcorr(rad_georef, rad_params, rad_vars_att, rad_vars_attcorr,
     if isinstance(rad_params['elev_ang [deg]'], str):
         dtdes1 = f"{rad_params['elev_ang [deg]']} -- "
     else:
-        dtdes1 = f"{rad_params['elev_ang [deg]']:{2}.{3}} deg. -- "
-    dtdes2 = f"{rad_params['datetime']:%Y-%m-%d %H:%M:%S}"
+        dtdes1 = f"{rad_params['elev_ang [deg]']:{2}.{2}} deg. -- "
+    if rad_params['datetime']:
+        dtdes2 = f"{rad_params['datetime']:%Y-%m-%d %H:%M:%S}"
+    else:
+        dtdes2 = ''
     ptitle = dtdes1 + dtdes2
 
     # =========================================================================
@@ -1931,8 +1954,11 @@ def plot_zdrattcorr(rad_georef, rad_params, rad_vars_att, rad_vars_attcorr,
     if isinstance(rad_params['elev_ang [deg]'], str):
         dtdes1 = f"{rad_params['elev_ang [deg]']} -- "
     else:
-        dtdes1 = f"{rad_params['elev_ang [deg]']:{2}.{3}} deg. -- "
-    dtdes2 = f"{rad_params['datetime']:%Y-%m-%d %H:%M:%S}"
+        dtdes1 = f"{rad_params['elev_ang [deg]']:{2}.{2}} deg. -- "
+    if rad_params['datetime']:
+        dtdes2 = f"{rad_params['datetime']:%Y-%m-%d %H:%M:%S}"
+    else:
+        dtdes2 = ''
     ptitle = dtdes1 + dtdes2
 
     # =========================================================================
@@ -2080,13 +2106,13 @@ def plot_radprofiles(rad_profs, beam_height, mlyr=None, stats=None, ylims=None,
     fontsizetick = 18
     prftype = getattr(rad_profs, 'profs_type').lower()
 
-    # ttxt_elev = f"{rad_profs.elev_angle:{2}.{3}} Deg."
+    # ttxt_elev = f"{rad_profs.elev_angle:{2}.{2}} Deg."
     # ttxt_dt = f"{rad_profs.scandatetime:%Y-%m-%d %H:%M:%S}"
     # ttxt = dtdes1+ttxt_dt
     if isinstance(rad_profs.elev_angle, str):
         dtdes1 = f"{rad_profs.elev_angle} -- "
     else:
-        dtdes1 = f"{rad_profs.elev_angle:{2}.{3}} deg. -- "
+        dtdes1 = f"{rad_profs.elev_angle:{2}.{2}} deg. -- "
     dtdes2 = f"{rad_profs.scandatetime:%Y-%m-%d %H:%M:%S}"
     ptitle = dtdes1 + dtdes2
 
@@ -2329,9 +2355,9 @@ def plot_rdqvps(rscans_georef, rscans_params, tp_rdqvp, spec_range=None,
     scan_st.legend(loc='upper right')
 
 
-def plot_offsetcorrection(rad_georef, rad_params, rad_var, var_offset=0,
-                          fig_size=None, var_name='PhiDP [deg]',
-                          cmap='tpylsc_div_lbu_w_rd'):
+def plot_offsetcorrection(rad_georef, rad_params, rad_var, var_m=None,
+                          var_offset=0, fig_size=None, var_name='PhiDP [deg]',
+                          mode='mean', cmap='tpylsc_div_lbu_w_rd'):
     """
     Plot the offset detection method from ZDR/PhiDP_Calibration Class.
 
@@ -2349,14 +2375,19 @@ def plot_offsetcorrection(rad_georef, rad_params, rad_var, var_offset=0,
     cmap : colormap, optional
         User-defined colormap. The default is 'tpylsc_div_lbu_w_rd'.
     """
-    var_mean = np.array([np.nanmean(i) for i in rad_var])
-    # var_mean = np.zeros_like(rad_georef['azim [rad]']) + var_offset
+    if var_m is None:
+        if mode == 'mean':
+            var_m = np.array([np.nanmean(i) for i in rad_var])
+        elif mode == 'median':
+            var_m = np.array([np.nanmedian(i) for i in rad_var])
+    else:
+        var_m = var_m
     if var_name == 'PhiDP [deg]':
         label1 = r'$\Phi_{DP}$'
         labelm = r'$\overline{\Phi_{DP}}$'
         labelo = r'$\Phi_{DP}$ offset'
-        dval = 3
-        dof = 10
+        dof = 90
+        dval = dof // 3
     elif var_name == 'ZDR [dB]':
         label1 = '$Z_{DR}$'
         labelm = r'$\overline{Z_{DR}}$'
@@ -2372,8 +2403,11 @@ def plot_offsetcorrection(rad_georef, rad_params, rad_var, var_offset=0,
     if isinstance(rad_params['elev_ang [deg]'], str):
         dtdes1 = f"{rad_params['elev_ang [deg]']} -- "
     else:
-        dtdes1 = f"{rad_params['elev_ang [deg]']:{2}.{3}} deg. -- "
-    dtdes2 = f"{rad_params['datetime']:%Y-%m-%d %H:%M:%S}"
+        dtdes1 = f"{rad_params['elev_ang [deg]']:{2}.{2}} deg. -- "
+    if rad_params['datetime']:
+        dtdes2 = f"{rad_params['datetime']:%Y-%m-%d %H:%M:%S}"
+    else:
+        dtdes2 = ''
     ptitle = dtdes1 + dtdes2
     ax.set_title(ptitle, fontsize=16)
     ax.grid(color='gray', linestyle=':')
@@ -2383,37 +2417,42 @@ def plot_offsetcorrection(rad_georef, rad_params, rad_var, var_offset=0,
     # =========================================================================
     ax.scatter((np.ones_like(rad_var.T) * [rad_georef['azim [rad]']]).T,
                rad_var, s=5, c=rad_var, cmap=cmap, label=label1,
-               norm=mpc.SymLogNorm(linthresh=.01, linscale=.01, base=2,
-                                   vmin=var_mean.mean()-dval,
-                                   vmax=var_mean.mean()+dval))
+               norm=mpc.SymLogNorm(
+                   linthresh=.01, linscale=.01, base=2,
+                   vmin=(var_m.mean()-dval if mode == 'mean'
+                         else np.median(var_m)-dval if mode == 'median'
+                         else var_m.min()),
+                   vmax=(var_m.mean()+dval if mode == 'mean'
+                         else np.median(var_m)+dval if mode == 'median'
+                         else var_m.max())))
     # =========================================================================
-    # Plot the radar variable mean value of each azimuth
+    # Plot the radar variable mean/median value of each azimuth
     # =========================================================================
-    ax.plot(rad_georef['azim [rad]'], var_mean, c='tab:green', linewidth=2,
-            ls='', marker='s', markeredgecolor='g', alpha=0.4,
-            label=labelm)
+    ax.plot(rad_georef['azim [rad]'], var_m, c='grey', linewidth=2,
+            ls='', marker='s', markeredgecolor='k', alpha=0.4, label=labelm)
     # =========================================================================
     # Plot the radar variable offset
     # =========================================================================
     if var_offset != 0:
         ax.plot(rad_georef['azim [rad]'],
                 np.full(rad_georef['azim [rad]'].shape, var_offset),
-                c='k', linewidth=2.5, label=labelo)
+                c='k', linewidth=2.5,
+                label=f'{labelo} \n [{var_offset:0.2f}]')
 
     ax.set_thetagrids(np.arange(0, 360, 90))
     ax.xaxis.grid(ls='-')
     ax.tick_params(axis='both', labelsize=14)
     ax.set_rlabel_position(-45)
-    if var_name == 'PhiDP [deg]':
-        ax.set_ylim([var_mean.mean()-dof, var_mean.mean()+dof])
-        ax.set_yticks(np.arange(round(var_mean.mean()/dval)*dval-dof,
-                                round(var_mean.mean()/dval)*dval+dof+1,
-                                dval))
-    else:
-        ax.set_ylim([var_mean.mean()-dof, var_mean.mean()+dof])
-        # ax.set_yticks(np.arange(round(var_mean.mean()/dval)*dval-dof,
-        #                         round(var_mean.mean()/dval)*dval+dof+.1,
-        #                         dval))
+    # if var_name == 'PhiDP [deg]':
+    #     ax.set_ylim([var_m.mean()-dof, var_m.mean()+dof])
+    #     ax.set_yticks(np.arange(round(var_m.mean()/dval)*dval-dof,
+    #                             round(var_m.mean()/dval)*dval+dof+1,
+    #                             dval))
+    # else:
+    #     ax.set_ylim([var_m.mean()-dof, var_m.mean()+dof])
+    #     # ax.set_yticks(np.arange(round(var_m.mean()/dval)*dval-dof,
+    #     #                         round(var_m.mean()/dval)*dval+dof+.1,
+    #     #                         dval))
     angle = np.deg2rad(67.5)
     ax.legend(fontsize=15, loc="lower left",
               bbox_to_anchor=(.58 + np.cos(angle)/2, .4 + np.sin(angle)/2))
@@ -2658,8 +2697,11 @@ def plot_ppidiff(rad_georef, rad_params, rad_var1, rad_var2, var2plot1=None,
         if isinstance(rad_params['elev_ang [deg]'], str):
             dtdes1 = f"{rad_params['elev_ang [deg]']} -- "
         else:
-            dtdes1 = f"{rad_params['elev_ang [deg]']:{2}.{3}} deg. -- "
-        dtdes2 = f"{rad_params['datetime']:%Y-%m-%d %H:%M:%S}"
+            dtdes1 = f"{rad_params['elev_ang [deg]']:{2}.{2}} deg. -- "
+        if rad_params['datetime']:
+            dtdes2 = f"{rad_params['datetime']:%Y-%m-%d %H:%M:%S}"
+        else:
+            dtdes2 = ''
         ptitle = dtdes1 + dtdes2
     else:
         ptitle = fig_title
@@ -2771,3 +2813,112 @@ def plot_ppidiff(rad_georef, rad_params, rad_var1, rad_var2, var2plot1=None,
     ax_idx['C'].grid(True)
     ax_idx['C'].axes.set_aspect('equal')
     ax_idx['C'].tick_params(axis='both', labelsize=10)
+
+
+# =============================================================================
+# %% xarray implementation
+# =============================================================================
+
+def _plot_rhohvmethod_single(snr_edges, rho_edges, hist, snr_db, rhohv_na,
+                             snr_centers, theo_line, histmax, opt_noise,
+                             fig_size=(8, 6)):
+    fig, ax = plt.subplots(figsize=fig_size)
+    pcm = ax.pcolormesh(snr_edges, rho_edges, hist.T,
+                        norm=mpc.LogNorm(vmin=10**0, vmax=10**1),
+                        cmap="tpylsc_useq_calm_r")
+
+    ax.plot(snr_centers, theo_line, color="tab:purple", lw=3,
+            label=r"theoretical $\rho_{HV}$")
+    ax.plot(snr_centers, histmax, color="k", lw=2, ls=":",
+            label="histogram maxima")
+    ax.scatter(snr_db.values.flatten(), rhohv_na.values.flatten(),
+               s=2, alpha=0.2, color="grey", label=r"raw $\rho_{HV}$")
+    ax.axhline(1.0, ls="--", color="tab:red")
+    ax.set_title(f"Noise level rc = {opt_noise:.2f} dB")
+    ax.set_xlabel("SNR [dB]")
+    ax.set_ylabel(r"$\rho_{HV}$ [-]")
+    ax.set_xlim(5, 30)
+    ax.set_ylim(0.8, 1.1)
+    fig.colorbar(pcm, ax=ax, label="n points")
+    ax.legend()
+    plt.show()
+
+
+def _plot_rhohvmethod_grid(Z, rng_km, rhohv_na, mode="linear", exp_curvet=20.0,
+                           eps=0.005, rhohv_theo=(0.90, 1.0), opt_noise=None,
+                           bins_snr=(5, 30, 0.1), bins_rho=(0.8, 1.1, 0.005),
+                           fig_size=(16, 9)):
+    """
+    Plot calibration grid around the optimised noise level.
+    Shows histograms for opt_noise ±5 dB in 1 dB steps,
+    using corrected rhoHV (rhohv_corr).
+    """
+    from ..calib.calib_rhohv import _build_theo_line
+    from ..eclass.snr import signal2noiseratio
+    from ..utils.radutilities import xr_hist2d
+
+    if opt_noise is None:
+        raise ValueError("opt_noise must be provided (final noise_level_dB).")
+
+    rc_values = np.arange(opt_noise - 4, opt_noise + 5, 1.0)
+
+    snr_edges = np.arange(*bins_snr)
+    rho_edges = np.arange(*bins_rho)
+    rhohv_centers = 0.5 * (rho_edges[:-1] + rho_edges[1:])
+    snr_centers = 0.5 * (snr_edges[:-1] + snr_edges[1:])
+
+    hists, histmax, theo_lines = [], [], []
+    for rc in rc_values:
+        snr_db = signal2noiseratio(Z, rng_km, rc, scale="db")
+        snr_lin = signal2noiseratio(Z, rng_km, rc, scale="lin")
+        rhohv_corr = (rhohv_na * (1 + 1 / snr_lin)).rename("rhohv_corr")
+        hist = xr_hist2d(snr_db, rhohv_corr, snr_edges, rho_edges,
+                         dim=list(snr_db.dims))
+        hists.append((hist.values, snr_edges, rho_edges))
+
+        rhohv_bin_dim = [d for d in hist.dims if d.endswith("_bin")][1]
+        idx = hist.argmax(dim=rhohv_bin_dim)
+        maxima = xr.apply_ufunc(lambda i: rhohv_centers[i], idx,
+                                vectorize=True, dask="parallelized",
+                                output_dtypes=[float]).values
+        histmax.append(maxima)
+
+        theo_line = _build_theo_line(snr_centers, rhohv_theo, mode=mode,
+                                     exp_curvet=exp_curvet, eps=eps)
+        theo_lines.append(theo_line)
+
+    nc = min(3, len(hists))
+    nr = len(hists) // nc + (len(hists) % nc > 0)
+    fig, axes = plt.subplots(nrows=nr, ncols=nc,
+                             sharex=True, sharey=True,
+                             figsize=fig_size, constrained_layout=True)
+    axes = np.atleast_1d(axes).ravel()
+
+    for i, ax in enumerate(axes):
+        if i < len(hists):
+            H, snr_edges, rho_edges = hists[i]
+            maxima = histmax[i]
+            theo_line = theo_lines[i]
+            rc = rc_values[i]
+
+            if np.isclose(rc, opt_noise, atol=0.5):
+                title_color, weight = "tab:purple", "bold"
+            else:
+                title_color, weight = "tab:grey", "normal"
+
+            ax.set_title(f"{rc:.1f} dB", color=title_color, fontweight=weight)
+            ax.plot(snr_edges[1:], maxima, color="k", lw=2, ls=":",
+                    label="histogram maxima")
+            ax.plot(snr_centers, theo_line, color="tab:purple", lw=2,
+                    label="theoretical line")
+            ax.axhline(1.0, ls="--", color="tab:red")
+            pcm = ax.pcolormesh(snr_edges, rho_edges, H.T,
+                                norm=mpc.LogNorm(vmin=10**0, vmax=10**1),
+                                cmap="tpylsc_useq_calm_r", rasterized=True)
+            ax.tick_params(axis="both", which="major", labelsize=9)
+
+    clb = fig.colorbar(pcm, ax=axes, location="right", shrink=0.85)
+    clb.ax.set_title("n points")
+    fig.supxlabel("SNR [dB]")
+    fig.supylabel(r"$\rho_{HV}$ [-]")
+    plt.show()

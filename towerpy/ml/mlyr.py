@@ -45,7 +45,7 @@ class MeltingLayer:
         self.profs_type = getattr(radobj, 'profs_type',
                                   'user-defined') if radobj else 'user-defined'
 
-    def findpeaksboundaries(profile, pheight, param_w=0):
+    def findpeaksboundaries(profile_v, profile_h, param_k=None):
         """
         Find peaks inside a profile using signal processing.
 
@@ -63,83 +63,57 @@ class MeltingLayer:
 
         """
         import scipy.signal as scs
-        peaks = {'prfpks': scs.find_peaks(profile, height=(None, None),
-                                          width=(None, None), rel_height=1,
-                                          prominence=(None, None)),
-                 'prfbnd': scs.find_peaks(-profile, height=(None, None),
-                                          width=(None, None), rel_height=1,
-                                          prominence=(None, None)),
-                 }
-        peaks['prfpks'][1]['left_ips'] = np.interp(
-            peaks['prfpks'][1]['left_ips'], np.arange(0, len(profile)),
-            pheight)
-        peaks['prfpks'][1]['right_ips'] = np.interp(
-            peaks['prfpks'][1]['right_ips'], np.arange(0, len(profile)),
-            pheight)
-        if not peaks['prfpks'][0].size:
-            pkprf = np.nan
-            maxpeakh = np.nan
+
+        peaks, peaks_props = scs.find_peaks(profile_v, height=(None, None),
+                                            threshold=(None, None),
+                                            prominence=(param_k*.7, 2),
+                                            width=(None, None),
+                                            plateau_size=(None, None),
+                                            # rel_height=0.985
+                                            rel_height=0.99
+                                            )
+        peaks_props['left_ips'] = np.interp(
+            peaks_props['left_ips'], np.arange(0, len(profile_v)),
+            profile_h)
+        peaks_props['right_ips'] = np.interp(
+            peaks_props['right_ips'], np.arange(0, len(profile_v)),
+            profile_h)
+
+        if peaks.size == 0 or np.all(np.isnan(peaks)):
+            peaks_idx = {'idxmax': np.nan, 'idxtop': np.nan, 'idxbot': np.nan,
+                         'mltop': np.nan, 'mlbtm': np.nan, 'peakmaxvalue': np.nan,
+                         'mlpeak': np.nan}
         else:
-            # Locate peaks maxima
-            pkprf = (peaks['prfpks']
-                     [0][peaks['prfpks'][1]['peak_heights'].argmax()])
-            maxpeakh = peaks['prfpks'][1]['peak_heights'].max()
-        if not peaks['prfbnd'][0].size or not peaks['prfpks'][0].size:
-            buprf = np.nan
-            btprf = np.nan
-            flprf = np.nan
-            bottp = np.nan
-            maxpeakh = np.nan
-            mlpeak = np.nan
-        else:
-            # Locate peak top boundarie
-            if pkprf >= peaks['prfbnd'][0][-1]:
-                buprf = peaks['prfbnd'][0][-1]
-                btprf = peaks['prfbnd'][0][-1]
-            else:
-                idx_peak = peaks['prfpks'][1]['peak_heights'].argmax()
-                if param_w == 0:
-                    param_w = 0.05
-                elif param_w >= 0.3:
-                    param_w = 0.3
-                param_w2 = maxpeakh * param_w
-                aux = [-i if -i <= param_w2 else np.nan
-                       for i in peaks['prfbnd'][1]['peak_heights']]
-                if len(aux[idx_peak+1:]) < 1:
-                    buprf = peaks['prfbnd'][0][np.searchsorted(
-                        peaks['prfbnd'][0], pkprf)]
-                else:
-                    buprf = peaks['prfbnd'][0][idx_peak + (
-                        np.isnan(aux[idx_peak+1:]).argmin(axis=0))+1]
-                if len(aux[:idx_peak-1]) < 1:
-                    btprf = peaks['prfbnd'][0][np.searchsorted(
-                        peaks['prfbnd'][0], pkprf)-1]
-                else:
-                    btprf = peaks['prfbnd'][0][idx_peak-1-np.isnan(
-                        np.flip(aux[:idx_peak-1])).argmin(axis=0)-1]
-            if buprf <= pkprf:
-                buprf = np.nan  # check
-                flprf = np.nan
-            else:
-                flprf = pheight[buprf]
-            if btprf >= pkprf:
-                btprf = np.nan
-                bottp = np.nan  # check
-            if not np.isnan(btprf):
-                bottp = pheight[btprf]
-            if not np.isnan(maxpeakh):
-                mlpeak = pheight[pkprf]
-            else:
-                mlpeak = np.nan
-        peaks_idx = {'idxmax': pkprf, 'idxtop': buprf, 'idxbot': btprf,
-                     'mltop': flprf, 'mlbtm': bottp, 'peakmaxvalue': maxpeakh,
-                     'mlpeak': mlpeak}
+            bbpeak_naiveidx = np.nanargmax(peaks_props['peak_heights'])
+            peakmax_props = {
+                (k1 if k1.endswith('ips') else k1[:-1]): v1[bbpeak_naiveidx] 
+                for k1, v1 in peaks_props.items()}
+            idx_top = rut.find_nearest(profile_h, peakmax_props['right_ips'],
+                                       mode='major')
+            idx_bot = rut.find_nearest(profile_h, peakmax_props['left_ips'],
+                                       mode='minor')
+            peaks_idx = {
+                'idxmax': peaks[bbpeak_naiveidx],
+                # 'idxtop': peakmax_props['right_base'],
+                # 'idxbot': peakmax_props['left_base'],
+                'idxtop': idx_top,
+                'idxbot': idx_bot,
+                'peakmaxvalue': peakmax_props['peak_height'],
+                'peakmaxits': peakmax_props['prominence'],
+                'mlpeak': profile_h[peaks[bbpeak_naiveidx]],
+                # 'mltop': profile_h[peakmax_props['right_base']],
+                # 'mlbtm': profile_h[peakmax_props['left_base']],
+                'mltop': profile_h[idx_top],
+                'mlbtm': profile_h[idx_bot]
+                }
+            peaks_idx['mlthk'] = peaks_idx['mltop'] - peaks_idx['mlbtm']
+
         return peaks_idx
 
-    def ml_detection(self, pol_profs, min_h=0, max_h=5, zhnorm_min=5.,
+    def ml_detection(self, pol_profs, min_h=0., max_h=5., zhnorm_min=5.,
                      zhnorm_max=60., rhvnorm_min=0.85, rhvnorm_max=1.,
-                     phidp_peak='left', gradv_peak='left', param_k=0.05,
-                     param_w=0.75, comb_id=None, plot_method=False):
+                     upplim_thr=0.75, param_k=0.05, param_w=0.75, comb_id=None,
+                     phidp_peak='left', gradv_peak='left', plot_method=False):
         r"""
         Detect melting layer signatures within polarimetric VPs/QVPs.
 
@@ -298,42 +272,35 @@ class MeltingLayer:
         profzh_norm = rut.normalisenanvalues(profzh, zhnorm_min, zhnorm_max)
         profrhv[profrhv < rhvnorm_min] = rhvnorm_min
         profrhv[profrhv > rhvnorm_max] = rhvnorm_max
-        profrhv_norm = rut.normalisenanvalues(profrhv, rhvnorm_min,
-                                              rhvnorm_max)
-
+        profrhv_norm = rut.normalisenanvalues(
+            profrhv, rhvnorm_min, rhvnorm_max)
         # Combine ZH and rhoHV (norm) to create a new profile
         profcombzh_rhv = profzh_norm[min_hidx:max_hidx]*(
             1-profrhv_norm[min_hidx:max_hidx])
-
         # Detect peaks within the new profile
         pkscombzh_rhv = MeltingLayer.findpeaksboundaries(
             profcombzh_rhv,
             pol_profs.georef['profiles_height [km]'][min_hidx:max_hidx],
-            param_w=param_w)
-
+            param_k=param_k)
         # If no peaks were found, the profile is classified as No ML signatures
         if (all(value is np.nan for value in pkscombzh_rhv.values())
            or pkscombzh_rhv['peakmaxvalue'] < param_k):
-            ttxt_dt = f"{self.scandatetime:%Y-%m-%d %H:%M:%S}"
-            # print(f'ML signatures could not be found at {ttxt_dt}')
             mlyr = np.nan
-            # mlrand = np.nan
-            # combin = np.nan
-            # idxml_top_it1 = 0
+            mlrand = np.nan
+            combin = np.nan
+            idxml_top_it1 = 0
+            comb_mult = []
+            comb_mult_w = []
+            idxml_btm_it1 = 0
         else:
             peakcombzh_rhv = (pol_profs.georef['profiles_height [km]']
                               [min_hidx:max_hidx][pkscombzh_rhv['idxmax']])
             idxml_btm_it1 = rut.find_nearest(
-                pol_profs.georef['profiles_height [km]'], peakcombzh_rhv-.75)
+                pol_profs.georef['profiles_height [km]'],
+                peakcombzh_rhv-upplim_thr)
             idxml_top_it1 = rut.find_nearest(
-                pol_profs.georef['profiles_height [km]'], peakcombzh_rhv+.75)
-            # if peakcombzh_rhv > 4.25:
-            if peakcombzh_rhv > max_h - 0.75:
-                idxml_top_it1 = 0
-            # if idxml_btm_it1 < min_hidx:
-            #     idxml_btm_it1 = min_hidx
-            # else:
-                # min_hidx = idxml_btm_it1
+                pol_profs.georef['profiles_height [km]'],
+                peakcombzh_rhv+upplim_thr)
             if idxml_top_it1 > min_hidx:
                 if self.profs_type.lower() == 'vps':
                     n = 5
@@ -369,15 +336,22 @@ class MeltingLayer:
                                for i in comb_mult]
                 mlrand = [MeltingLayer.findpeaksboundaries(
                         i, pol_profs.georef['profiles_height [km]'][idxml_btm_it1:idxml_top_it1],
-                        param_w=param_w)
+                        param_k=param_k)
                           for i in comb_mult_w]
                 for i, j in enumerate(mlrand):
-                    if mlrand[i]['peakmaxvalue'] < param_k:
-                        mlrand[i]['mltop'] = np.nan
+                    if mlrand[i]['peakmaxvalue'] <= param_k:
+                        mlrand[i] = {k: np.nan for k in mlrand[i]}
+                    if (mlrand[i]['mltop'] < min_h
+                        or mlrand[i]['mltop'] > max_h
+                        # or mlrand[i]['mltop'] <= 0
+                        ):
+                        mlrand[i] = {k: np.nan for k in mlrand[i]}
+                    # if mlrand[i]['mlbtm'] <= 0:
+                    #     mlrand[i]['mlbtm'] = 0
                 mlrandf = [{'ml_top': n['mltop'],
                             'ml_bottom': n['mlbtm'],
-                            'ml_peak': n['mlpeak'],
                             'ml_thickness': n['mltop']-n['mlbtm'],
+                            'ml_peakh': n['mlpeak'],
                             'ml_peakv': n['peakmaxvalue']}
                            for n in mlrand]
                 if comb_idpy is None:
@@ -389,27 +363,40 @@ class MeltingLayer:
                 combin = np.nan
                 mlyr = np.nan
                 comb_mult = []
+        if isinstance(mlrand, list) and mlrand and ~np.isnan(mlrand[7]['idxmax']):
+            bb_intensity = profzh[idxml_btm_it1:idxml_top_it1][mlrand[7]['idxmax']]
+            bb_peakh = pol_profs.georef['profiles_height [km]'][idxml_btm_it1:idxml_top_it1][mlrand[7]['idxmax']]
+        else:
+            bb_intensity = np.nan
+            bb_peakh = np.nan
 
-            if plot_method:
-                rad_interactive.ml_detectionvis(
-                    pol_profs.georef['profiles_height [km]'], profzh_norm,
-                    profrhv_norm, profcombzh_rhv, pkscombzh_rhv, comb_mult,
-                    comb_mult_w, comb_idpy, mlrand, min_hidx, max_hidx,
-                    param_k, idxml_btm_it1, idxml_top_it1)
-
-        if isinstance(mlyr, dict):
+        if plot_method:
+            rad_interactive.ml_detectionvis(
+                pol_profs.georef['profiles_height [km]'], profzh_norm,
+                profrhv_norm, profcombzh_rhv, pkscombzh_rhv, comb_mult,
+                comb_mult_w, comb_idpy, mlrand, min_hidx, max_hidx,
+                param_k, idxml_btm_it1, idxml_top_it1)
+        if comb_idpy is None:
+            self.ml_id = mlyr
+        elif comb_idpy is not None and isinstance(mlyr, dict):
             self.ml_top = mlyr['ml_top']
             self.ml_bottom = mlyr['ml_bottom']
             self.ml_thickness = mlyr['ml_thickness']
             self.profpeakv = mlyr['ml_peakv']
+            self.profpeakh = mlyr['ml_peakh']
+            self.bbpeakvalue = bb_intensity
+            self.bb_peakh = bb_peakh
         else:
             self.ml_top = np.nan
             self.ml_bottom = np.nan
             self.ml_thickness = np.nan
             self.profpeakv = np.nan
-
-    def ml_ppidelimitation(self, rad_georef, rad_params, classid=None,
-                           plot_method=False):
+            self.profpeakh = np.nan
+            self.bbpeakvalue = bb_intensity
+            self.bb_peakh = bb_peakh
+    
+    def ml_ppidelimitation(self, rad_georef, rad_params, beam_cone='centre',
+                           classid=None, plot_method=False):
         """
         Create a PPI depicting the limits of the melting layer.
 
@@ -420,6 +407,12 @@ class MeltingLayer:
             and beam height, amongst others.
         rad_params : dict
             Radar technical details.
+        beam_cone : {'centre', 'top', 'bottom', 'all'}, optional
+            Beam‑height descriptor to use for ML gating.
+            'centre' uses ``beam_height [km]`` (default),
+            'top' uses ``beamtop_height [km]``,
+            'bottom' uses ``beambottom_height [km]``,
+            'all' returns results for all three.
         classid : dict, optional
             Modifies the key/values of the melting layer delimitation
             (regionID). The default are the same as in regionID.
@@ -444,32 +437,149 @@ class MeltingLayer:
                          'solid_pcp': 3.}
         if classid is not None:
             self.regionID.update(classid)
-        if isinstance(ml_top, (int, float)):
-            mlt_idx = [rut.find_nearest(nbh, ml_top)
-                       for nbh in rad_georef['beam_height [km]']]
-        elif isinstance(ml_top, (np.ndarray, list, tuple)):
-            mlt_idx = [rut.find_nearest(nbh, ml_top[cnt])
-                       for cnt, nbh in
-                       enumerate(rad_georef['beam_height [km]'])]
-        if isinstance(ml_bottom, (int, float)):
-            if np.isnan(ml_bottom):
-                ml_bottom = ml_top - ml_thickness
-            mlb_idx = [rut.find_nearest(nbh, ml_bottom)
-                       for nbh in rad_georef['beam_height [km]']]
-        elif isinstance(ml_bottom, (np.ndarray, list, tuple)):
-            ml_bottom = [mlt - ml_thickness[c1]
-                         if np.isnan(ml_bottom[c1]) else ml_bottom[c1]
-                         for c1, mlt in enumerate(ml_top)]
-            mlb_idx = [rut.find_nearest(nbh, ml_bottom[cnt])
-                       for cnt, nbh in
-                       enumerate(rad_georef['beam_height [km]'])]
-        ashape = np.zeros((rad_params['nrays'], rad_params['ngates']))
-        for cnt, azi in enumerate(ashape):
-            azi[:mlb_idx[cnt]] = self.regionID['rain']
-            azi[mlt_idx[cnt]:] = self.regionID['solid_pcp']
-        ashape[ashape == 0] = self.regionID['mlyr']
-        self.mlyr_limits = {'pcp_region [HC]': ashape}
+        gbeam2use = (['beam_height [km]'] if beam_cone == 'centre' else 
+                     ['beamtop_height [km]'] if beam_cone == 'top' else 
+                     ['beambottom_height [km]'] if beam_cone == 'bottom' else 
+                     ['beam_height [km]', 'beamtop_height [km]',
+                      'beambottom_height [km]'])
+        # =============================================================================
+        mlylims = {}
+        for gb2d in gbeam2use:
+            if isinstance(ml_top, (int, float)):
+                mlt_idx = [rut.find_nearest(nbh, ml_top)
+                           for nbh in rad_georef[gb2d]]
+            elif isinstance(ml_top, (np.ndarray, list, tuple)):
+                mlt_idx = [rut.find_nearest(nbh, ml_top[cnt])
+                           for cnt, nbh in
+                           enumerate(rad_georef[gb2d])]
+            if isinstance(ml_bottom, (int, float)):
+                if np.isnan(ml_bottom):
+                    ml_bottom = ml_top - ml_thickness
+                mlb_idx = [rut.find_nearest(nbh, ml_bottom)
+                           for nbh in rad_georef[gb2d]]
+            elif isinstance(ml_bottom, (np.ndarray, list, tuple)):
+                ml_bottom = [mlt - ml_thickness[c1]
+                             if np.isnan(ml_bottom[c1]) else ml_bottom[c1]
+                             for c1, mlt in enumerate(ml_top)]
+                mlb_idx = [rut.find_nearest(nbh, ml_bottom[cnt])
+                           for cnt, nbh in
+                           enumerate(rad_georef[gb2d])]
+            ashape = np.zeros((rad_params['nrays'], rad_params['ngates']))
+            for cnt, azi in enumerate(ashape):
+                azi[:mlb_idx[cnt]] = self.regionID['rain']
+                azi[mlt_idx[cnt]:] = self.regionID['solid_pcp']
+            ashape[ashape == 0] = self.regionID['mlyr']
+            if gb2d == 'beam_height [km]':
+                mlylims['pcp_region [HC]'] = ashape
+            elif gb2d == 'beamtop_height [km]':
+                mlylims['pcp_region_tb [HC]'] = ashape
+            elif gb2d == 'beambottom_height [km]':
+                mlylims['pcp_region_bb [HC]'] = ashape
+        # =============================================================================
+        # self.mlyr_limits = {'pcp_region [HC]': ashape}
+        self.mlyr_limits = mlylims
         if plot_method:
             rad_display.plot_ppi(rad_georef, rad_params, self.mlyr_limits,
                                  cbticks=self.regionID,
                                  ucmap='tpylc_div_yw_gy_bu')
+    
+    # def ml_ppidelimitation(self, rad_georef, rad_params, beam_cone='centre',
+    #                        classid=None, plot_method=False):
+    #     """
+    #     Create a PPI depicting the limits of the melting layer.
+
+    #     Parameters
+    #     ----------
+    #     rad_georef : dict
+    #         Georeferenced data containing descriptors of the azimuth, gates
+    #         and beam height, amongst others.
+    #     rad_params : dict
+    #         Radar technical details.
+    #     beam_cone : {'centre', 'top', 'bottom', 'all'}, optional
+    #         Beam‑height descriptor to use for ML delimitation.
+    #         'centre' uses ``beam_height [km]`` (default),
+    #         'top' uses ``beamtop_height [km]``,
+    #         'bottom' uses ``beambottom_height [km]``,
+    #         'all' returns results for all three.
+    #     classid : dict, optional
+    #         Modifies the key/values of the melting layer delimitation
+    #         (regionID). The default are the same as in regionID.
+    #     plot_method : bool, optional
+    #         Plot the results of the ML delimitation. The default is False.
+
+    #     Attributes
+    #     ----------
+    #     regionID : dict
+    #         Key/values of the rain limits:
+    #             'rain' = 1
+
+    #             'mlyr' = 2
+
+    #             'solid_pcp' = 3
+    #     """
+    #     ml_top = self.ml_top
+    #     ml_thickness = self.ml_thickness
+    #     ml_bottom = self.ml_bottom
+        
+    #     self.regionID = {'rain': 1.,
+    #                      'mlyr': 2.,
+    #                      'solid_pcp': 3.}
+    #     if classid is not None:
+    #         self.regionID.update(classid)
+        
+    #     beam_map = {
+    #         'centre':  ['beam_height [km]'],
+    #         'top':     ['beamtop_height [km]'],
+    #         'bottom':  ['beambottom_height [km]'],
+    #         'all':     ['beam_height [km]', 'beamtop_height [km]',
+    #                     'beambottom_height [km]']}
+    #     gbeam2use = beam_map.get(beam_cone, beam_map['centre'])
+        
+    #     # =============================================================================
+    #     nrays = rad_params['nrays']
+    #     ngates = rad_params['ngates']
+        
+    #     # --- normalise ml_top ---
+    #     if np.isscalar(ml_top):
+    #         ml_top_arr = np.full(nrays, ml_top, dtype=float)
+    #     else:
+    #         ml_top_arr = np.asarray(ml_top, dtype=float)
+    #         if ml_top_arr.shape[0] != nrays:
+    #             raise ValueError("ml_top must have length nrays")
+        
+    #     # --- handle ml_bottom according to your rules ---
+    #     if np.isscalar(ml_bottom):
+    #         if np.isnan(ml_bottom):
+    #             ml_bottom_arr = ml_top_arr - ml_thickness
+    #         else:
+    #             ml_bottom_arr = np.full(nrays, ml_bottom, dtype=float)
+    #     else:
+    #         ml_bottom_arr = np.asarray(ml_bottom, dtype=float)
+    #         if ml_bottom_arr.shape[0] != nrays:
+    #             raise ValueError("ml_bottom must have length nrays")
+    #         if np.isnan(ml_bottom_arr).any():
+    #             raise ValueError("ml_bottom array must not contain NaN")
+        
+    #     mlylims = {}
+    #     rain_id  = self.regionID['rain']
+    #     solid_id = self.regionID['solid_pcp']
+    #     mlyr_id  = self.regionID['mlyr']
+        
+    #     key_map = {'beam_height [km]':      'pcp_region [HC]',
+    #                'beamtop_height [km]':   'pcp_region_tb [HC]',
+    #                'beambottom_height [km]':'pcp_region_bb [HC]'}
+    #     gate_idx = np.arange(ngates)[None, :]
+    #     for gb2d in gbeam2use:
+    #         ashape = np.full((nrays, ngates), mlyr_id, dtype=float)
+    #         rain_mask  = gate_idx <  ml_bottom_arr[:, None]
+    #         solid_mask = gate_idx >= ml_top_arr[:, None]
+    #         ashape[rain_mask]  = rain_id
+    #         ashape[solid_mask] = solid_id
+    #         # store result
+    #         mlylims[key_map[gb2d]] = ashape
+    #     # =============================================================================
+    #     self.mlyr_limits = mlylims
+    #     if plot_method:
+    #         rad_display.plot_ppi(rad_georef, rad_params, self.mlyr_limits,
+    #                              cbticks=self.regionID,
+    #                              ucmap='tpylc_div_yw_gy_bu')

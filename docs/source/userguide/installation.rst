@@ -71,6 +71,8 @@ The following dependencies are required to work with _towerpy_:
      - Required
    * - NumPy
      - v1.21+
+   * - xarray
+     - v2025.6.1+
    * - SciPy
      - v1.7.1+
    * - Matplotlib
@@ -78,6 +80,6 @@ The following dependencies are required to work with _towerpy_:
    * - Cartopy
      - v0.19+
    * - netCDF4
-     - vv1.5.8+
+     - v1.5.8+
 
 Some modules within *towerpy* run using shared objects/dynamic link libraries (.so, .dll). These libraries are automatically installed during the *towerpy* installation.

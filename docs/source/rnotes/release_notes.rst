@@ -6,8 +6,35 @@ What’s New In Towerpy
 Summary – Release highlights
 ----------------------------
 
-**Latest release: v1.0.9**
+**Latest release: v1.1.0**
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Towerpy v1.1.0
+~~~~~~~~~~~~~~
+::
+  **Towerpy v1.1.0**
+  
+    **Release Date:** 13 Jan 2026
+
+
+    **New features**
+      #. **rhoHV_Calibration**: Introduces a new function for correcting noise biases in rhoHV.
+      #. **Attn_Refl_Relation**: Adds a rhoHV threshold to ensure that only rain echoes are used when computing the Z(A) relations.
+      #. **calib_phidp: offsetdetection_ppi**: Adds a plotting option to illustrate the PhiDP offset computation.
+      #. **rad_interactive**: Adds an interactive guide line showing the selected azimuth in PPI plots when using coord_sys='rect'.
+      #. **georad**: Introduces ppi_georef, a new function for generating georeferenced grids for PPI radar scans.
+
+    **Minor corrections**
+      #. **ml_detection**: Improves the melting layer boundaries detection.
+      #. **zh_correction & zdr_correction & PhiDP_offsetdetection_vps & ZDR_offsetdetection_vps & lsinterference_filter**: These functions no longer require rad_params during initialisation.
+      #. **zdr_correction**: Fixes an issue in the computation of coefficient beta that could incorrectly treat np.nan as a valid value.
+      #. **ml_detectionvis**: Resolves an error triggered when no melting layer is detected, ensuring stable plotting behaviour. 
+      #. **ppi_ukmogeoref**: Now uses ppi_georef for generating georeference grids, improving consistency across modules.
+      #. **datavis**: Sets 'polar' as the default coord_sys across all visualisation functions.
+
+    **Deprecations**
+      #. **ppi_emptygeoref**: Renamed to ppi_create_georef, where ppi_georef is used for generating georeference grids, improving consistency across modules.
+
 
 Towerpy v1.0.9
 ~~~~~~~~~~~~~~

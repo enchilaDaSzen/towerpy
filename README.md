@@ -102,11 +102,12 @@ Or install Towerpy in “editable” mode::
 
 Package | Required
 ------------ | -------------
-NumPy | v1.21+
-SciPy | v1.7.1+
-Matplotlib | v3.5.2+
-Cartopy | v0.19+
-netCDF4 | vv1.5.8+
+xarray       | v2025.6.1+
+NumPy        | v1.21+
+SciPy        | v1.7.1+
+Matplotlib   | v3.5.2+
+Cartopy      | v0.19+
+netCDF4      | v1.5.8+
 
 \*Some modules within _towerpy_ run using shared objects/dynamic link libraries (.so, .dll). These libraries are automatically installed during the _towerpy_ installation.
 
