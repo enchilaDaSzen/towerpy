@@ -41,8 +41,7 @@ class ZDR_Calibration:
 
     def offsetdetection_vps(self, pol_profs, mlyr=None, min_h=1.1, zhmin=5,
                             zhmax=30, rhvmin=0.98, minbins=2, stats=False,
-                            plot_method=False, rad_georef=None,
-                            rad_params=None, rad_vars=None):
+                            plot_method=False, rad_georef=None, rad_vars=None):
         r"""
         Calculate the offset on :math:`Z_{DR}` using vertical profiles.
 
@@ -79,9 +78,6 @@ class ZDR_Calibration:
         rad_georef : dict, optional
             Used only to depict the methodolgy. Georeferenced data containing
             descriptors of the azimuth, gate and beam height, amongst others.
-            The default is None.
-        rad_params : dict, optional
-            Used only to depict the methodolgy. Radar technical details.
             The default is None.
         rad_vars : dict, optional
             Used only to depict the methodolgy. Radar variables used for
@@ -159,6 +155,15 @@ class ZDR_Calibration:
                                          'offset_sem': calzdrvps_sem,
                                          }
             if plot_method:
+                rad_params = {}
+                if self.elev_angle:
+                    rad_params['elev_ang [deg]'] = self.elev_angle
+                else:
+                    rad_params['elev_ang [deg]'] = 'surveillance scan'
+                if self.scandatetime:
+                    rad_params['datetime'] = self.scandatetime
+                else:
+                    rad_params['datetime'] = None
                 var = 'ZDR [dB]'
                 rad_var = np.array([i[boundaries_idx[0]:boundaries_idx[1]]
                                     for i in rad_vars[var]], dtype=np.float64)

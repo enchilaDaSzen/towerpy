@@ -70,7 +70,9 @@ class SNR_Classif:
             rc = rad_cst
         else:
             rc = rad_params['radar constant [dB]']
-        snrc = rad_vars['ZH [dBZ]'] - 20*np.log10(rad_georef['rho']) + rc
+        rh, _ = np.meshgrid(rad_georef['range [m]']/1000,
+                             rad_georef['azim [rad]'])
+        snrc = rad_vars['ZH [dBZ]'] - 20*np.log10(rh) + rc
         idx = np.nonzero(snrc >= min_snr)
         snrclass = np.full(snrc.shape, np.nan)
         snrclass[idx] = 1
@@ -122,7 +124,9 @@ class SNR_Classif:
             rc = rad_cst
         else:
             rc = rad_params['radar constant [dB]']
-        snrc = rad_vars['ZH [dBZ]'] - 20*np.log10(rad_georef['rho']) + rc
+        rh, _ = np.meshgrid(rad_georef['range [m]']/1000,
+                             rad_georef['azim [rad]'])
+        snrc = rad_vars['ZH [dBZ]'] - 20*np.log10(rh) + rc
         idx = np.nonzero(snrc >= min_snr)
         snrclass = np.full(snrc.shape, np.nan)
         snrclass[idx] = 1
@@ -136,3 +140,46 @@ class SNR_Classif:
                 rdatsnr[key] = rdatsnr[key]*snrclass
                 return snr, rdatsnr
         return snr
+
+
+# =============================================================================
+# %% xarray implementation
+# =============================================================================
+
+def signal2noiseratio(Z, rng_km, rc, scale="db"):
+    """
+    Compute signal-to-noise ratio (SNR).
+
+    Parameters
+    ----------
+    Z : array_like or xarray.DataArray
+        Reflectivity factor [dBZ].
+    rng_km : array_like or xarray.DataArray
+        Range [km].
+    rc : float
+        Radar constant [dB].
+    scale : {"db", "lin", "both"}, optional
+        Output format:
+        - "db"   : return SNR in dB (default)
+        - "lin"  : return SNR in linear scale
+        - "both" : return dict with both
+
+    Returns
+    -------
+    snr : ndarray, DataArray, or dict
+        Depending on `scale`:
+        - "db"   → snr_db
+        - "lin"  → snr_lin
+        - "both" → {"snr_db": snr_db, "snr_lin": snr_lin}
+    """
+    if scale == "db":
+        return Z - 20.0 * np.log10(rng_km) + rc
+    elif scale == "lin":
+        snr_db = Z - 20.0 * np.log10(rng_km) + rc
+        return 10.0 ** (snr_db / 10.0)
+    elif scale == "both":
+        snr_db = Z - 20.0 * np.log10(rng_km) + rc
+        snr_lin = 10.0 ** (snr_db / 10.0)
+        return {"snr_db": snr_db, "snr_lin": snr_lin}
+    else: raise ValueError(f"Unknown scale '{scale}',"
+                           " expected 'db', 'lin', or 'both'.")

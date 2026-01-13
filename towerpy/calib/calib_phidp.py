@@ -11,7 +11,7 @@ from ..utils.radutilities import rolling_window
 
 class PhiDP_Calibration:
     r"""
-    A class to calibrate the radar differential phase :math:`(\Phi_{DP})`.
+    A class for calibrating the differential phase :math:`(\Phi_{DP})`.
 
     Attributes
     ----------
@@ -45,7 +45,7 @@ class PhiDP_Calibration:
     def offsetdetection_vps(self, pol_profs, mlyr=None, min_h=1.1, max_h=None,
                             zhmin=5, zhmax=30, rhvmin=0.98, minbins=2,
                             stats=False, plot_method=False, rad_georef=None,
-                            rad_params=None, rad_vars=None):
+                            rad_vars=None):
         r"""
         Calculate the offset on :math:`\Phi_{DP}` using vertical profiles.
 
@@ -83,8 +83,6 @@ class PhiDP_Calibration:
         rad_georef : dict, optional
             Georeferenced data containing descriptors of the azimuth, gates
             and beam height, amongst others. The default is None.
-        rad_params : dict, optional
-            Radar technical details. The default is None.
         rad_vars : dict, optional
             Radar variables used for plotting the offset correction method.
             The default is None.
@@ -150,6 +148,15 @@ class PhiDP_Calibration:
                                            'offset_sem': calphidpvps_sem,
                                            }
             if plot_method:
+                rad_params = {}
+                if self.elev_angle:
+                    rad_params['elev_ang [deg]'] = self.elev_angle
+                else:
+                    rad_params['elev_ang [deg]'] = 'surveillance scan'
+                if self.scandatetime:
+                    rad_params['datetime'] = self.scandatetime
+                else:
+                    rad_params['datetime'] = None
                 var = 'PhiDP [deg]'
                 rad_var = np.array([i[boundaries_idx[0]:boundaries_idx[1]]
                                     for i in rad_vars[var]], dtype=np.float64)
@@ -272,7 +279,7 @@ class PhiDP_Calibration:
 
     def offsetdetection_ppi(self, rad_vars, mov_avrgf_len=(1, 3), thr_spdp=10,
                             rhohv_min=0.9, zh_min=5., max_off=360, preset=None,
-                            preset_tol=5, mode='median'):
+                            preset_tol=5, mode='median', plot_method=False):
         r"""
         Compute the :math:`\Phi_{DP}` offset using PPIs`.
 
@@ -384,6 +391,10 @@ class PhiDP_Calibration:
             nr[np.isfinite(nr)][0] if ~np.isnan(nr).all() else 0
             for nr in phidp_f]], dtype=np.float64).transpose()
         phidp0[phidp0 == 0] = np.nanmedian(phidp0[phidp0 != 0])
+        phidp0[abs(phidp0) > max_off] = 0
+        phidp0 = np.nan_to_num(phidp0)
+        if preset:
+            phidp0[abs(phidp0 - preset) > preset_tol] = preset
         if mode == 'median':
             phidp_offset = np.nanmedian(phidp0)
             if abs(phidp_offset) > max_off or np.isnan(phidp_offset):
@@ -391,13 +402,28 @@ class PhiDP_Calibration:
             if preset and abs(phidp_offset - preset) > preset_tol:
                 phidp_offset = preset
         elif mode == 'multiple':
-            phidp0[abs(phidp0) > max_off] = 0
-            phidp0 = np.nan_to_num(phidp0)
-            if preset:
-                phidp0[abs(phidp0 - preset) > preset_tol] = preset
-            phidp_offset = phidp0
+            phidp_offset = phidp0.flatten()
         self.phidp_offset = phidp_offset
-        # return phidp_offset
+        if plot_method:
+            rad_params = {}
+            if self.elev_angle:
+                rad_params['elev_ang [deg]'] = self.elev_angle
+            else:
+                rad_params['elev_ang [deg]'] = 'surveillance scan'
+            if self.scandatetime:
+                rad_params['datetime'] = self.scandatetime
+            else:
+                rad_params['datetime'] = None
+            var = 'PhiDP [deg]'
+            phidp02plot = np.nanmedian(phidp0)
+            rad_var = phidp0.flatten()
+            azim = np.deg2rad(np.arange(len(rad_var)))
+            rad_georef = {}
+            rad_georef['azim [rad]'] = azim
+            rad_display.plot_offsetcorrection(
+                rad_georef, rad_params, rad_vars['PhiDP [deg]'], var_m=rad_var,
+                var_offset=phidp02plot, var_name=var, mode='other')
+
 
     def offset_correction(self, phidp2calib, phidp_offset=0,
                           data2correct=None):

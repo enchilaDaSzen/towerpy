@@ -96,53 +96,46 @@ class Rad_scan:
         self.elev_angle = parameters['elev_ang [deg]']
         self.scandatetime = parameters['datetime']
 
-    def ppi_emptygeoref(self, azim=None, gate0=0, gateres=250):
+    def ppi_create_georef(self, polarc_exist=True, elev=0.5, gate0=0,
+                          gateres=250):
         """
         Create a georeferenced grid for the empty object.
 
         Parameters
         ----------
-        azim : array
-            Azimuth angles of the scan, in radians. If None, the azimuths are
-            computed from 0 to the number of rays.
+        polarc_exist : bool
+            If True, polar coordinates (range, azimuth, elevation) are
+            read directly from the georef attribute. If False,
+            synthesise elevation, azimuth, and range.
+            The default is True
+        elev : float
+            Elevation angle in degrees (used if `polarc_exist=False`).
+            The default is 0.5
         gate0 : float
-            Distance from the radar to the first bin.
-        gateres : int
-            Bin resolution of the scan, in metres.
+            Starting range gate in metres (used if `polarc_exist=False`).
+            The default is 0
+        gateres : float
+            Gate resolution in metres (used if `polarc_exist=False`).
+            The default is 250
+        
+        Notes
+        -----
+        1. Polar coordinates (azimuth, elevation) are expected to be in radians, and range values are expected to be in metres.
+        2. Some radar technical details are read from Rad_scan.params
+        3. This method wraps :func:`geo.ppi_georef` and updates the object's `georef` attribute with computed Cartesian grids and beam heights.
         """
+        if polarc_exist:
+            geogrid, _ = geo.ppi_georef(self.params, georef=self.georef)
+        else:
+            geogrid, geopolc = geo.ppi_georef(
+                self.params, polarc_exist=False, elev=elev, gate0=gate0,
+                gateres=gateres)
+        # Update resolution in params
         self.params['gateres [m]'] = gateres
-        elev = np.deg2rad(np.full(self.params['nrays'], self.elev_angle))
-        azim = np.deg2rad(np.arange(self.params['nrays']))
-        rng = np.arange(gate0, self.params['ngates']*gateres,
-                        self.params['gateres [m]'], dtype=float)
-        bhkm = np.array([geo.height_beamc(ray, rng/1000)
-                         for ray in np.rad2deg(elev)])
-        bhbkm = np.array([geo.height_beamc(ray
-                                           - self.params['beamwidth [deg]']/2,
-                                           rng/1000)
-                          for ray in np.rad2deg(elev)])
-        bhtkm = np.array([geo.height_beamc(ray
-                                           + self.params['beamwidth [deg]']/2,
-                                           rng/1000)
-                          for ray in np.rad2deg(elev)])
-
-        rh, th = np.meshgrid(rng/1000, azim)
-
-        s = np.array([geo.cartesian_distance(ray, rng/1000, bhkm[0])
-                      for i, ray in enumerate(np.rad2deg(elev))])
-        a = [geo.pol2cart(arcl, azim) for arcl in s.T]
-        xgrid = np.array([i[1] for i in a]).T
-        ygrid = np.array([i[0] for i in a]).T
-        geogrid = {'azim [rad]': azim,
-                   'elev [rad]': elev,
-                   'range [m]': rng,
-                   'rho': rh,
-                   'theta': th,
-                   'grid_rectx': xgrid,
-                   'grid_recty': ygrid}
-        self.params['gateres [m]'] = gateres
-        # alt = self.params['altitude [m]']
-        geogrid['beam_height [km]'] = bhkm
-        geogrid['beambottom_height [km]'] = bhbkm
-        geogrid['beamtop_height [km]'] = bhtkm
-        self.georef = geogrid
+        if hasattr(self, 'georef'):
+           self.georef.update(geogrid)
+        else:
+            self.georef = {'azim [rad]': geopolc['azim [rad]'],
+                           'elev [rad]': geopolc['elev [rad]'],
+                           'range [m]': geopolc['range [m]']}
+            self.georef.update(geogrid)

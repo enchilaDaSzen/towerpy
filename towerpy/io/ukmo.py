@@ -231,9 +231,9 @@ class Rad_scan:
         parameters['range_start [m]'] = emptyarr[4][0]
 
         # Create dict to store geospatial data
-        rh, th = np.meshgrid(emptyarr[4]/1000, emptyarr[2])
+        # rh, th = np.meshgrid(emptyarr[4]/1000, emptyarr[2])
         geogrid = {'range [m]': emptyarr[4], 'elev [rad]': emptyarr[3],
-                   'azim [rad]': emptyarr[2], 'rho': rh, 'theta': th}
+                   'azim [rad]': emptyarr[2]}
 
         self.elev_angle = parameters['elev_ang [deg]']
         self.scandatetime = parameters['datetime']
@@ -242,36 +242,17 @@ class Rad_scan:
         self.vars = poldata
 
     def ppi_ukmogeoref(self):
-        """Create georeferenced data from the UKMO PPI scan."""
-        # xgrid, ygrid = geo.pol2cart(self.georef['rho'],
-        #                             np.pi/2-self.georef['theta'])
-        bhkm = np.array([geo.height_beamc(ray, self.georef['range [m]']/1000)
-                         for ray in np.rad2deg(self.georef['elev [rad]'])])
-        bhbkm = np.array([geo.height_beamc(ray
-                                           - self.params['beamwidth [deg]']/2,
-                                           self.georef['range [m]']/1000)
-                          for ray in np.rad2deg(self.georef['elev [rad]'])])
-        bhtkm = np.array([geo.height_beamc(ray
-                                           + self.params['beamwidth [deg]']/2,
-                                           self.georef['range [m]']/1000)
-                          for ray in np.rad2deg(self.georef['elev [rad]'])])
-        s = np.array([geo.cartesian_distance(ray,
-                                             self.georef['range [m]']/1000,
-                                             bhkm[0])
-                      for i,
-                      ray in enumerate(np.rad2deg(self.georef['elev [rad]']))])
-        a = [geo.pol2cart(arcl, self.georef['azim [rad]']) for arcl in s.T]
-
-        grid_rectx = np.array([i[1] for i in a]).T
-        grid_recty = np.array([i[0] for i in a]).T
-
-        grid_osgbx = (grid_rectx + self.params['easting [km]'])*1000
-        grid_osgby = (grid_recty + self.params['northing [km]'])*1000
-
-        self.georef['grid_rectx'] = grid_rectx
-        self.georef['grid_recty'] = grid_recty
-        self.georef['beam_height [km]'] = bhkm
-        self.georef['beambottom_height [km]'] = bhbkm
-        self.georef['beamtop_height [km]'] = bhtkm
-        self.georef['grid_osgbx'] = grid_osgbx
-        self.georef['grid_osgby'] = grid_osgby
+        """
+        Create georeferenced data from the UKMO PPI scan.
+        
+        Notes
+        -----
+        1. This method wraps :func:`geo.ppi_georef` and adds OSGB coordinates based on radar easting and northing offsets.
+        2. OSGB coordinates are computed by shifting the relative Cartesian grid ('grid_rectx', 'grid_recty') by the radar easting/northing (in kilometres) and converting to metres.
+        """
+        geogrid, _ = geo.ppi_georef(self.params, georef=self.georef)
+        geogrid['grid_osgbx'] = (
+            geogrid['grid_rectx'] + self.params['easting [km]'])*1000
+        geogrid['grid_osgby'] = (
+            geogrid['grid_recty'] + self.params['northing [km]'])*1000
+        self.georef.update(geogrid)

@@ -1,12 +1,13 @@
 """Towerpy: an open-source toolbox for processing polarimetric radar data."""
 
-import copy
+# import copy
 import cartopy.io.shapereader as shpreader
 import numpy as np
+import xarray as xr
 from scipy import interpolate
 
 
-def find_nearest(iarray, val2search):
+def find_nearest(iarray, val2search, mode="any"):
     """
     Return the index of the closest value to a given number.
 
@@ -16,16 +17,37 @@ def find_nearest(iarray, val2search):
              Input array.
     val2search : float or int
                  Value to search into the array.
+    mode : {"any", "major", "minor"}, optional
+        - "any": closest value in the array (default)
+        - "major": closest local maximum
+        - "minor": closest local minimum
 
     Returns
     -------
     idx : float or int
-        Index into the array.
+        Index into the array, or None if no candidate found.
 
     """
     a = np.asarray(iarray)
-    idx = (np.abs(a - val2search)).argmin()
-    return idx
+
+    if mode == "any":
+        return int(np.abs(a - val2search).argmin())
+
+    # interior extrema candidates
+    if mode == "major":
+        mask = (a[1:-1] > a[:-2]) & (a[1:-1] > a[2:])
+    elif mode == "minor":
+        mask = (a[1:-1] < a[:-2]) & (a[1:-1] < a[2:])
+    else:
+        raise ValueError("mode must be 'any', 'major', or 'minor'")
+
+    candidates = np.where(mask)[0] + 1  # shift to original indices
+
+    # if none found, fall back to nearest anywhere
+    if candidates.size == 0:
+        return int(np.abs(a - val2search).argmin())
+
+    return int(candidates[np.abs(a[candidates] - val2search).argmin()])
 
 
 def normalisenan(a):
@@ -85,7 +107,7 @@ def fillnan1d(x):
         Array with nan values filtered.
 
     """
-    x = np.array(x)
+    x = np.array(x, dtype=float)
     mask = np.isnan(x)
     idx = np.where(~mask, np.arange(mask.size), 0)
     np.maximum.accumulate(idx, out=idx)
@@ -382,3 +404,210 @@ def idx_consecutive(array1d, step_size=1, group_size=1):
 def linspace_step(start, stop, step):
     """Like np.linspace but uses step instead of num."""
     return np.linspace(start, stop, int((stop - start) / step + 1))
+
+
+# =============================================================================
+# %% xarray implementation
+# =============================================================================
+
+def _to_kilometers(var: xr.DataArray):
+    '''Convert units of DataArray in metres to kilometres.'''
+    units = var.attrs.get("units", "").lower()
+
+    if units in ["m", "meter", "meters", "metre", "metres"]:
+        out = var / 1000
+        out.attrs = var.attrs.copy()
+        out.attrs["units"] = "km"
+        return out
+
+    elif units in ["km", "kilometer", "kilometers", "kilometre",
+                   "kilometres"]:
+        return var
+
+    # fallback: assume metres
+    out = var / 1000
+    out.attrs = var.attrs.copy()
+    out.attrs["units"] = "km"
+    return out
+
+
+def xr_hist2d(x, y, x_edges, y_edges, dim):
+    """
+    Compute a vectorised 2D histogram of two DataArrays.
+
+    Parameters
+    ----------
+    x, y : xr.DataArray
+        Input variables to histogram over, sharing the same core dimensions.
+    x_edges, y_edges : array-like
+        Bin edges for the x and y axes, defining the histogram grid.
+    dim : list[str]
+        Dimensions over which the histogram is computed and reduced.
+
+    Returns
+    -------
+    xr.DataArray
+        A 2D histogram with labelled ``x_bin`` and ``y_bin`` dimensions,
+        vectorised over all non-core dimensions.
+    """
+    def _hist2d(a, b):
+        H, _, _ = np.histogram2d(a.ravel(), b.ravel(), bins=[x_edges, y_edges])
+        return H
+
+    return xr.apply_ufunc(_hist2d, x, y, input_core_dims=[dim, dim],
+                          output_core_dims=[["x_bin", "y_bin"]],
+                          vectorize=True, dask="parallelized",
+                          output_dtypes=[float]).assign_coords(
+                              x_bin=x_edges[:-1], y_bin=y_edges[:-1])
+
+
+def record_provenance(ds, function, outputs, parameters, step=None, inputs=None,
+                      extra_attrs=None):
+    """
+    Update a Dataset’s provenance chain by recording function steps, inputs, outputs, and parameters.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Dataset whose provenance metadata is to be updated.
+    function : str
+        Name of the function contributing to the correction chain.
+    outputs : list[str]
+        Variables produced or modified by the function.
+    parameters : dict
+        Parameter values used during the function call.
+    step : str, optional
+        Logical step name for grouping related function calls; defaults to ``function``.
+    inputs : list[str], optional
+        Variables read or required by the function.
+    extra_attrs : dict, optional
+        Additional attributes to attach directly to the Dataset.
+
+    Returns
+    -------
+    xr.Dataset
+        The Dataset with an updated ``correction_chain`` attribute reflecting the new provenance entry.
+    """
+
+    
+    # Im not sure if timestamp is necessary
+    # timestamp = dt.datetime.utcnow().isoformat() + "Z"
+
+    # Normalise outputs to unique sorted list
+    outputs = sorted(set(outputs))
+    inputs = sorted(set(inputs or []))
+
+    chain = list(ds.attrs.get("correction_chain", []))
+
+    # Use (function, step) as grouping key
+    key_func = function
+    key_step = step or function  # default: step == function
+
+    existing = None
+    for entry in chain:
+        if (entry.get("function") == key_func
+            and entry.get("step") == key_step):
+            # and entry.get("scope") == "dataset")
+            existing = entry
+            break
+
+    if existing:
+        # Merge outputs
+        existing_outputs = set(existing.get("outputs", []))
+        existing["outputs"] = sorted(existing_outputs.union(outputs))
+        # Merge parameters (update with latest values)
+        existing["parameters"].update(parameters)
+        # Merge inputs
+        existing_inputs = set(existing.get("inputs", []))
+        existing["inputs"] = sorted(existing_inputs.union(inputs))
+    else:
+        # Create new entry
+        entry = {
+            # "timestamp": timestamp,
+            "function": key_func,
+            "step": key_step,
+            "outputs": outputs,
+            "inputs": inputs,
+            "parameters": parameters,
+            # "scope": "dataset",
+            "provenance": "Towerpy",
+        }
+        chain.append(entry)
+
+    ds.attrs["correction_chain"] = chain
+
+    if extra_attrs:
+        for k, v in extra_attrs.items():
+            ds.attrs[k] = v
+
+    return ds
+
+
+def apply_correction_chain(ds, varname, step, params, mask=None, suffix="_corr"):
+    """
+    Apply a correction mask to a variable and add it back into the Dataset,
+    appending provenance-aware metadata to track the full correction chain.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset containing the variable to correct.
+    varname : str
+        Name of the variable to correct.
+    mask : xarray.DataArray
+        Boolean or categorical mask aligned with ds[varname].
+    step : str
+        Short tag describing the correction step (e.g. "SNR_correction").
+    params : dict
+        Parameters used in the correction (e.g. {"min_snr": 5}).
+    suffix : str, optional
+        Suffix for the corrected variable name. Default "_corr".
+
+    Returns
+    -------
+    ds : xarray.Dataset
+        Dataset with new corrected variable added.
+    """
+    corrected_name = f"{varname}{suffix}"
+    if mask is not None:
+        corrected = ds[varname].where(mask == 0)
+    else:
+        corrected = ds[varname]
+
+    new_entry = {
+        "step": step,
+        "params": params,
+        "parent": varname,
+        "outputs": [corrected_name],   # <-- explicit outputs
+        "mode": "overwrite" if suffix == "" else "preserve"
+    }
+    chain = ds[varname].attrs.get("correction_chain", [])
+    chain.append(new_entry)
+
+    # Base metadata update (variable-level only)
+    meta_update = {
+        "correction": step,
+        "correction_params": params,
+        "parent": varname,
+        "history": ds[varname].attrs.get("history", "") + f" | {new_entry}",
+        "correction_chain": chain,
+        "provenance": "Towerpy",
+        "provenance_step": step,
+        "provenance_base": varname,
+        "mode": new_entry["mode"],
+    }
+
+    # Variable-specific refinements (inline)
+    if varname == "DBTH" and step == "offset_correction":
+        meta_update.update({
+            "standard_name": "radar_equivalent_reflectivity_factor_h",
+            "long_name": "Equivalent reflectivity factor H",
+            "short_name": "DBZH",
+            "units": "dBZ",
+            "provenance_offset_applied": float(params.get("offset", 0.0)),
+        })
+    # Apply variable-level attrs and insert into dataset
+    corrected.attrs = {**ds[varname].attrs, **meta_update}
+    ds[corrected_name] = corrected
+
+    return ds

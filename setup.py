@@ -5,7 +5,7 @@ from os import path
 
 setup(
       name='towerpy-rd',
-      version='1.0.9',
+      version='1.1.0',
       description='Toolbox for processing polarimetric weather radar data',
       url='https://github.com/uobwatergroup/towerpy',
       author='Daniel Sanchez-Rivas and Miguel A Rico-Ramirez',
@@ -15,7 +15,7 @@ setup(
       include_package_data=True,
       package_data={'towerpy': ['io/lnxlibreadpolarradardata.so', 'eclass/lnxlibclutterclassifier.so', 'attc/lnxlibattenuationcorrection.so',
       				'io/w64libreadpolarradardata.dll', 'eclass/w64libclutterclassifier.dll', 'attc/w64libattenuationcorrection.dll']},
-      install_requires=['numpy', 'matplotlib>=3.5.2', 'scipy', 'cartopy', 'netCDF4'],
+      install_requires=['numpy', 'matplotlib>=3.5.2', 'scipy', 'cartopy', 'netCDF4', 'xarray>=2025.6.1'],
       classifiers=(
         "Programming Language :: Python :: 3",
 	"Programming Language :: Python :: 3.9",

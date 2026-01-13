@@ -4,7 +4,6 @@ from pathlib import Path
 import platform
 import warnings
 import copy
-import time
 import ctypes as ctp
 import numpy as np
 import numpy.ctypeslib as npct
@@ -52,9 +51,8 @@ class NME_ID:
         self.site_name = getattr(radobj, 'site_name',
                                  None) if radobj else None
 
-    def lsinterference_filter(self, rad_georef, rad_params, rad_vars,
-                              rhv_min=0.3, classid=None, data2correct=None,
-                              plot_method=False):
+    def lsinterference_filter(self, rad_georef, rad_vars, data2correct=None,
+                              rhv_min=0.3, classid=None, plot_method=False):
         """
         Filter linear signatures and speckles.
 
@@ -63,8 +61,6 @@ class NME_ID:
         rad_georef : dict
             Georeferenced data containing descriptors of the azimuth,
             gates and beam height, amongst others.
-        rad_params : dict
-            Radar technical details.
         rad_vars : dict
             Radar variables used to identify the LS and speckles.
         rhv_min : float, optional
@@ -158,6 +154,16 @@ class NME_ID:
         self.ls_dsp_class = lsc_data
 
         if plot_method:
+            rad_params = {}
+            if self.elev_angle:
+                rad_params['elev_ang [deg]'] = self.elev_angle
+            else:
+                rad_params['elev_ang [deg]'] = 'surveillance scan'
+            if self.scandatetime:
+                rad_params['datetime'] = self.scandatetime
+            else:
+                rad_params['datetime'] = None
+
             rad_display.plot_ppi(rad_georef, rad_params, lsc_data,
                                  cbticks=self.echoesID,
                                  ucmap='tpylc_div_yw_gy_bu')

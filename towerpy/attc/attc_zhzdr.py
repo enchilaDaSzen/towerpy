@@ -229,7 +229,7 @@ class AttenuationCorrection:
         attvars['PhiDP [deg]'] = phidp_maf['PhiDPi [deg]']
         self.vars = attvars
 
-    def zh_correction(self, rad_georef, rad_params, attvars, cclass, mlyr=None,
+    def zh_correction(self, rad_georef, attvars, cclass, mlyr=None,
                       attc_method='ABRI', pdp_pxavr_rng=7, pdp_pxavr_azm=1,
                       pdp_dmin=20, coeff_alpha=[0.020, 0.1, 0.073],
                       coeff_a=[1e-5, 9e-5, 3e-5], coeff_b=[0.65, 0.85, 0.78],
@@ -242,12 +242,11 @@ class AttenuationCorrection:
         rad_georef : dict
             Georeferenced data containing descriptors of the azimuth, gates
             and beam height, amongst others.
-        rad_params : dict
-            Radar technical details.
         attvars : dict
             Polarimetric variables used for the attenuation correction.
         cclass : array
-            Clutter, noise and meteorological classification.
+            Clutter, noise and meteorological echoes classification:
+            'pcpn' = 0, 'noise' = 3, 'clutter' = 5
         mlyr : MeltingLayer Class, optional
             Melting layer class containing the top of the melting layer, (i.e.,
             the melting level) and its thickness, in km. Only gates below the
@@ -255,8 +254,7 @@ class AttenuationCorrection:
             are included in the computation; ml_top and ml_thickness can be
             either a single value (float, int), or an array (or list) of values
             corresponding to each azimuth angle of the scan. If None, the
-            function is applied to the whole PPI scan, assuming a ml_thickness
-            of 0.5 km.
+            function is applied assuming ml_top=5km and ml_thickness=0.5 km.
         attc_method : str
             Attenuation correction algorithm to be used. The default is 'ABRI':
 
@@ -281,8 +279,8 @@ class AttenuationCorrection:
             Pixels to average in :math:`\Phi_{DP}` along azimuth. Must be an
             odd number. The default is 1.
         pdp_dmin : float
-            Minimum total :math:`\Phi_{DP}` expected in a ray to perform
-            attenuation correction (at least 20-30 degrees). The default is 20.
+            Minimum total :math:`\Delta\Phi_{DP}` expected in a ray to perform
+            attenuation correction (at least 10-20 degrees). The default is 20.
         coeff_alpha : 3-element tuple or list, optional
             [Min, max, fixed value] of coeff :math:`\alpha`. These bounds are
             used to find the optimum value of :math:`\alpha` from
@@ -453,6 +451,15 @@ class AttenuationCorrection:
         self.phidp_offset = param_atc[15]
 
         if plot_method:
+            rad_params = {}
+            if self.elev_angle:
+                rad_params['elev_ang [deg]'] = self.elev_angle
+            else:
+                rad_params['elev_ang [deg]'] = 'surveillance scan'
+            if self.scandatetime:
+                rad_params['datetime'] = self.scandatetime
+            else:
+                rad_params['datetime'] = None
             rad_display.plot_zhattcorr(
                 rad_georef, rad_params, attvars, attcorr, mlyr=mlyr,
                 vars_bounds={'alpha [-]':
@@ -460,7 +467,7 @@ class AttenuationCorrection:
                               round((coeff_alpha[1]+(coeff_alpha[1]*.1))*100,
                                     -1)/100, 11]})
 
-    def zdr_correction(self, rad_georef, rad_params, attvars, attcorr_vars,
+    def zdr_correction(self, rad_georef, attvars, attcorr_vars,
                        cclass, mlyr=None, attc_method='BRI',
                        coeff_beta=[0.008, 0.1, 0.04], beta_alpha_ratio=0.265,
                        rhv_thld=0.985, mov_avrgf_len=9, minbins=10, p2avrf=5,
@@ -474,15 +481,13 @@ class AttenuationCorrection:
         rad_georef : dict
             Georeferenced data containing descriptors of the azimuth, gates
             and beam height.
-        rad_params : dict
-            Radar technical details.
         attvars : dict
-            Polarimetric variables used the for attenuation correction.
+            Polarimetric variables to be corrected for attenuation.
         attcorr_vars : dict
-            Radar object containing  attenuation corrected polarimetric
-            variables used for calculations.
+            Attenuation-corrected polarimetric variables used for calculations.
         cclass : array
-            Clutter and meteorological classification.
+            Clutter, noise and meteorological echoes classification:
+            'pcpn' = 0, 'noise' = 3, 'clutter' = 5
         mlyr : MeltingLayer Class, optional
             Melting layer class containing the top of the melting layer, (i.e.,
             the melting level) and its thickness, in km. Only gates below the
@@ -490,8 +495,7 @@ class AttenuationCorrection:
             are included in the computation; ml_top and ml_thickness can be
             either a single value (float, int), or an array (or list) of values
             corresponding to each azimuth angle of the scan. If None, the
-            function is applied to the whole PPI scan, assuming a ml_thickness
-            of 0.5 km.
+            function is applied assuming ml_top=5km and ml_thickness=0.5 km.
         attc_method : str
             Attenuation correction algorithm to be used. The default is 'BRI':
 
@@ -588,6 +592,10 @@ class AttenuationCorrection:
             Technology, 22(11), 1621-1632. https://doi.org/10.1175/JTECH1803.1
 
         """
+        
+        # =====================================================================
+        # Parameter setup
+        # =====================================================================
         params = {'ZH-ZDR model': zh_zdr_model, 'ZH_lower_lim': 20,
                   'ZH_upper_lim': 45, 'model': 'coeff_a*ZH-coeff_b',
                   'zdr_max': 1.4, 'coeff_a': 0.048, 'coeff_b': 0.774}
@@ -616,31 +624,33 @@ class AttenuationCorrection:
 
         nrays = len(rad_georef['azim [rad]'])
 
-        m = np.zeros_like(attcorr_vars['ZH [dBZ]'])
-        for n, rows in enumerate(m):
-            rows[mlb_idx[n]:] = np.nan
-        m[cclass != 0] = np.nan
-        m[:, 0] = np.nan
+        mlb_mask = np.full_like(attcorr_vars['ZH [dBZ]'], 0.0, dtype=float)
+        for n, rows in enumerate(mlb_mask):
+            rows[mlb_idx[n]+1:] = np.nan
+        mlb_mask[cclass != 0] = np.nan
+        mlb_mask[:, 0] = np.nan
 
-        attcorrmask = {keys: np.ma.masked_array(values, m)
+        attcorrmask = {keys: np.ma.masked_array(values, mlb_mask)
                        for keys, values in attcorr_vars.items()}
-        attcorrmask['rhoHV [-]'] = np.ma.masked_array(attvars['rhoHV [-]'], m)
-        attcorrmask['ZDR [dB]'] = np.ma.masked_array(attvars['ZDR [dB]'], m)
+        attcorrmask['rhoHV [-]'] = np.ma.masked_array(attvars['rhoHV [-]'],
+                                                      mlb_mask)
+        attcorrmask['ZDR [dB]'] = np.ma.masked_array(attvars['ZDR [dB]'],
+                                                     mlb_mask)
 
         idxzdrattcorr = [i for i in range(nrays)
                          if any(attcorr_vars['alpha [-]'][i, :] > 0)]
+        
+        zdrattcorr, adpif, betaof, zdrstat = [], [], [], []
 
-        zdrattcorr = []
-        adpif = []
-        betaof = []
-        zdrstat = []
+        alphacopy = np.array(attcorr_vars['alpha [-]'], copy=True)
 
-        alphacopy = (np.zeros_like(attcorr_vars['alpha [-]'])
-                     + attcorr_vars['alpha [-]'])
         if attc_method == 'ABRI':
             bracket = coeff_beta[:2]
         elif attc_method == 'BRI':
             bracket = []
+        # =====================================================================
+        # Ray loop for attc
+        # =====================================================================
         for i in range(nrays):
             if i in idxzdrattcorr:
                 idmx = np.nancumsum(alphacopy[i]).argmax()
@@ -650,7 +660,6 @@ class AttenuationCorrection:
                              * attcorrmask['ZDR [dB]'][i, :])
                 zh_ibeam = (np.ones_like(attcorrmask['ZH [dBZ]'][i, :])
                             * attcorrmask['ZH [dBZ]'][i, :])
-
                 zdr_fltr_rhv = np.ma.masked_where(
                     attcorrmask['rhoHV [-]'][i, :] < rhv_thld, zdr_ibeam)
                 zh_fltr_rhv = np.ma.masked_where(
@@ -673,7 +682,7 @@ class AttenuationCorrection:
                               for i in range(0, len(rcells_idx), 2)][1::2]
                 if rcells_raw:
                     rcells_dm1 = np.concatenate(
-                        [np.array(range(int(i[0]), int(i[-1])+1))
+                        [np.array(range(int(i[0].item()), int(i[-1].item())+1))
                          for i in rcells_raw])
                     rcells_dm2 = np.split(
                         rcells_dm1, np.where(np.diff(rcells_dm1) > 1)[0] + 1)
@@ -688,8 +697,8 @@ class AttenuationCorrection:
                         raincells_len = np.concatenate([np.ediff1d(i)+1
                                                         for i in raincells])
                         rcell = raincells[np.nanargmax(raincells_len)]
-                        idxrs = int(rcell[0])
-                        idxrf = int(rcell[1])
+                        idxrs = int(rcell[0].item())
+                        idxrf = int(rcell[1].item())
                         zhcrf = np.nanmean(zh_mvavfl[idxrf - p2avrf+1:idxrf+1])
                         zdrmrf = np.nanmean(
                             zdr_mvavfl[idxrf - p2avrf+1:idxrf+1])
@@ -741,6 +750,8 @@ class AttenuationCorrection:
                                     betao = coeff_beta[0]
                                 if betao >= coeff_beta[1]:
                                     betao = coeff_beta[1]
+                                if np.isnan(betao):
+                                    betao = coeff_beta[2]
                                 betaopt = (np.zeros_like(
                                     attcorr_vars['alpha [-]'][i, :]) + betao)
                                 zdrcr = ((attvars['ZDR [dB]'][i, :])
@@ -751,8 +762,8 @@ class AttenuationCorrection:
                                         * attcorr_vars['AH [dB/km]'][i, :])
                                 statzdr = f'{i}: beta coeff optimised 1 iter'
                             except ValueError:
-                                idxrs = int(raincells[0][0])
-                                idxrf = int(raincells[-1][-1])
+                                idxrs = int(raincells[0][0].item())
+                                idxrf = int(raincells[-1][-1].item())
                                 zhcrf = np.nanmean(zh_mvavfl[idxrf-p2avrf+1:
                                                              idxrf+1])
                                 zdrmrf = np.nanmean(zdr_mvavfl[idxrf-p2avrf+1:
@@ -803,6 +814,8 @@ class AttenuationCorrection:
                                         betao = coeff_beta[0]
                                     if betao >= coeff_beta[1]:
                                         betao = coeff_beta[1]
+                                    if np.isnan(betao):
+                                        betao = coeff_beta[2]
                                     zdrcr = (
                                         (attvars['ZDR [dB]'][i, :])
                                         + ((betao/alphacopy[i, :])
@@ -844,6 +857,7 @@ class AttenuationCorrection:
                                    * beta_alpha_ratio)
                         statzdr = f'{i}: beta/alpha: fixed value'
                 else:
+                    # No segments found
                     zdrcr = (
                         (attvars['ZDR [dB]'][i, :])
                         + (beta_alpha_ratio * attcorr_vars['PIA [dB]'][i, :]))
@@ -852,6 +866,7 @@ class AttenuationCorrection:
                                * beta_alpha_ratio)
                     statzdr = f'{i}: beta/alpha: fixed value'
             else:
+                # Ray with no positive alpha
                 zdrcr = (
                     (attvars['ZDR [dB]'][i, :])
                     + (beta_alpha_ratio * attcorr_vars['PIA [dB]'][i, :]))
@@ -886,5 +901,14 @@ class AttenuationCorrection:
         self.vars |= attcorr1
 
         if plot_method:
+            rad_params = {}
+            if self.elev_angle:
+                rad_params['elev_ang [deg]'] = self.elev_angle
+            else:
+                rad_params['elev_ang [deg]'] = 'surveillance scan'
+            if self.scandatetime:
+                rad_params['datetime'] = self.scandatetime
+            else:
+                rad_params['datetime'] = None
             rad_display.plot_zdrattcorr(rad_georef, rad_params, attvars,
                                         attcorr1, mlyr=mlyr)

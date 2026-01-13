@@ -35,7 +35,8 @@ class Attn_Refl_Relation:
 
     def ah_zh(self, rad_vars, var2calc='ZH [dBZ]', rband='C', temp=20.,
               coeff_a=None, coeff_b=None, zh_lower_lim=20., zh_upper_lim=50.,
-              copy_ofr=True, data2correct=None, plot_method=False):
+              rhohv_lim=0.95, copy_ofr=True, data2correct=None,
+              plot_method=False):
         r"""
         Compute the :math:`A_H-Z_H` relation.
 
@@ -60,6 +61,9 @@ class Attn_Refl_Relation:
         zh_lower_lim, zh_upper_lim : floats
             Thresholds in :math:`Z_H` for the :math:`A_H(Z_H)` relationship.
             Default is :math:`20 < Z_H < 50 dBZ`.
+        rhohv_lim : float
+            Threshold in :math:`\rho_{HV}` to filter out invalid values.
+            Default is 0.95.
         copy_ofr : bool, optional
             If True, original values are used to populate out-of-range values,
             i.e., values below or above zh_limits. The default is True.
@@ -119,17 +123,18 @@ class Attn_Refl_Relation:
         if var2calc == 'ZH [dBZ]':
             # Copy the original dict to keep variables unchanged
             rvars = copy.deepcopy(rad_vars)
-            # Computes Zh
-            r_ahzhl = (rvars['AH [dB/km]'] / coeff_a) ** (1 / coeff_b)
+            # Computes Zh (linear units)
+            r_ahzhl = (((1 / coeff_a)**(1/coeff_b))
+                       * rvars['AH [dB/km]'] ** (1 / coeff_b))
             r_ahzh = {}
-            # r_ahzh['ZH [mm^6m^-3]'] = r_ahzhl
-            # Computes ZH
+            # Computes ZH (dBZ)
             r_ahzh['ZH [dBZ]'] = tpuc.x2xdb(r_ahzhl)
             # Filter values using a lower limit
-            r_ahzh['ZH [dBZ]'][r_ahzh['ZH [dBZ]'] < zh_lower_lim] = np.nan
+            r_ahzh['ZH [dBZ]'][rvars['ZH [dBZ]'] < zh_lower_lim] = np.nan
             # Filter values using an upper limit
-            r_ahzh['ZH [dBZ]'][r_ahzh['ZH [dBZ]'] > zh_upper_lim] = np.nan
+            r_ahzh['ZH [dBZ]'][rvars['ZH [dBZ]'] > zh_upper_lim] = np.nan
             # Filter invalid values
+            r_ahzh['ZH [dBZ]'][rvars['rhoHV [-]'] < rhohv_lim] = np.nan
             if copy_ofr and 'ZH [dBZ]' in rad_vars.keys():
                 # Filter invalid values
                 # Use original values to populate with out-of-range values.
@@ -149,6 +154,8 @@ class Attn_Refl_Relation:
             rvars['ZH [dBZ]'][rad_vars['ZH [dBZ]'] < zh_lower_lim] = np.nan
             # Filter values using an upper limit
             rvars['ZH [dBZ]'][rad_vars['ZH [dBZ]'] > zh_upper_lim] = np.nan
+            # Filter invalid values
+            rvars['ZH [dBZ]'][rvars['rhoHV [-]'] < rhohv_lim] = np.nan
             r_ahzh = {}
             r_ahzh['AH [dB/km]'] = (
                 coeff_a * (tpuc.xdb2x(rvars['ZH [dBZ]']) ** coeff_b))
@@ -174,7 +181,6 @@ class Attn_Refl_Relation:
         if data2correct is not None:
             # Copy the original dict to keep variables unchanged
             data2cc = copy.deepcopy(data2correct)
-            # data2cc = dict(data2correct)
             data2cc.update(r_ahzh)
             self.vars = data2cc
 
@@ -186,7 +192,8 @@ class Attn_Refl_Relation:
 
     def av_zv(self, rad_vars, var2calc='ZV [dBZ]', rband='C', temp=10.,
               coeff_a=None, coeff_b=None, zv_lower_lim=20., zv_upper_lim=50.,
-              copy_ofr=True, data2correct=None, plot_method=False):
+              rhohv_lim=0.95, copy_ofr=True, data2correct=None,
+              plot_method=False):
         r"""
         Compute the :math:`A_V-Z_V` relation.
 
@@ -211,6 +218,9 @@ class Attn_Refl_Relation:
         zv_lower_lim, zv_upper_lim : floats
             Thresholds in :math:`Z_V` for the :math:`A_V(Z_V)` relationship.
             Default is :math:`20 < Z_V < 50 dBZ`.
+        rhohv_lim : float
+            Threshold in :math:`\rho_{HV}` to filter out invalid values.
+            Default is 0.95.
         copy_ofr : bool, optional
             If True, original values are used to populate out-of-range values,
             i.e., values below or above zv_limits. The default is True.
@@ -271,16 +281,17 @@ class Attn_Refl_Relation:
             # Copy the original dict to keep variables unchanged
             rvars = copy.deepcopy(rad_vars)
             # Computes Zv
-            r_avzvl = (rvars['AV [dB/km]'] / coeff_a) ** (1 / coeff_b)
+            r_avzvl = (((1 / coeff_a)**(1/coeff_b))
+                       * rvars['AV [dB/km]'] ** (1 / coeff_b))
             r_avzv = {}
-            # r_avzv['ZV [mm^6m^-3]'] = r_avzvl
             # Computes ZV
             r_avzv['ZV [dBZ]'] = tpuc.x2xdb(r_avzvl)
             # Filter values using a lower limit
-            r_avzv['ZV [dBZ]'][r_avzv['ZV [dBZ]'] < zv_lower_lim] = np.nan
+            r_avzv['ZV [dBZ]'][rvars['ZV [dBZ]'] < zv_lower_lim] = np.nan
             # Filter values using an upper limit
-            r_avzv['ZV [dBZ]'][r_avzv['ZV [dBZ]'] > zv_upper_lim] = np.nan
+            r_avzv['ZV [dBZ]'][rvars['ZV [dBZ]'] > zv_upper_lim] = np.nan
             # Filter invalid values
+            r_avzv['ZV [dBZ]'][rvars['rhoHV [-]'] < rhohv_lim] = np.nan
             if copy_ofr and 'ZV [dBZ]' in rad_vars.keys():
                 # Filter invalid values
                 # Use original values to populate with out-of-range values.
@@ -288,6 +299,11 @@ class Attn_Refl_Relation:
                 r_avzv['ZV [dBZ]'][ind] = rvars['ZV [dBZ]'][ind]
                 ind = np.isnan(r_avzv['ZV [dBZ]'])
                 r_avzv['ZV [dBZ]'][ind] = rvars['ZV [dBZ]'][ind]
+            zv_diff = (tpuc.xdb2x(rad_vars['ZV [dBZ]'])
+                       / tpuc.xdb2x(r_avzv['ZV [dBZ]']))
+            zv_diff[np.isinf(zv_diff)] = np.nan
+            zv_diffdbZ = tpuc.x2xdb(zv_diff)
+            r_avzv['diff [dBZ]'] = zv_diffdbZ
         if var2calc == 'AV [dB/km]':
             # Copy the original dict to keep variables unchanged
             rvars = copy.deepcopy(rad_vars)
@@ -295,6 +311,8 @@ class Attn_Refl_Relation:
             rvars['ZV [dBZ]'][rad_vars['ZV [dBZ]'] < zv_lower_lim] = np.nan
             # Filter values using an upper limit
             rvars['ZV [dBZ]'][rad_vars['ZV [dBZ]'] > zv_upper_lim] = np.nan
+            # Filter invalid values
+            rvars['ZV [dBZ]'][rvars['rhoHV [-]'] < rhohv_lim] = np.nan
             r_avzv = {}
             r_avzv['AV [dB/km]'] = (
                 coeff_a * (tpuc.xdb2x(rvars['ZV [dBZ]']) ** coeff_b))
@@ -304,13 +322,22 @@ class Attn_Refl_Relation:
             # # Filter invalid values
             # ind = np.isnan(r_avzv['ZV [dBZ]'])
             # r_avzv['ZV [dBZ]'][ind] = rad_vars['ZV [dBZ]'][ind]
+            if copy_ofr and 'AV [dB/km]' in rad_vars.keys():
+                # Filter invalid values
+                # Use original values to populate with out-of-range values.
+                ind = np.isneginf(r_avzv['AV [dB/km]'])
+                r_avzv['AV [dB/km]'][ind] = rvars['AV [dB/km]'][ind]
+                ind = np.isnan(r_avzv['AV [dB/km]'])
+                r_avzv['AV [dB/km]'][ind] = rvars['AV [dB/km]'][ind]
+                av_diff = rad_vars['AV [dB/km]'] - r_avzv['AV [dB/km]']
+                av_diff[np.isinf(av_diff)] = np.nan
+                r_avzv['diff [dB/km]'] = av_diff
         self.vars = r_avzv
         self.coeff_a = coeff_a
         self.coeff_b = coeff_b
         if data2correct is not None:
             # Copy the original dict to keep variables unchanged
             data2cc = copy.deepcopy(data2correct)
-            # data2cc = dict(data2correct)
             data2cc.update(r_avzv)
             self.vars = data2cc
 
